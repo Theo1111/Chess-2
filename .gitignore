@@ -1,0 +1,13 @@
+node_modules/
+dist/
+
+# Balance runs are generated data — keep them out of source control
+# (a run can be gigabytes of matches.jsonl; commit one deliberately if it
+# becomes a pinned baseline).
+balance-results/
+
+.DS_Store
+*.log
+
+# Local-only Claude settings
+.claude/settings.local.json

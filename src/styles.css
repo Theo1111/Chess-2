@@ -1,0 +1,2090 @@
+/**
+ * Chess 2 — visual foundation.
+ * Design tokens live at the top so a Chess 2 identity pass is a palette change,
+ * not a rewrite.
+ */
+
+:root {
+  --bg: #101318;
+  --bg-elevated: #171b22;
+  --bg-panel: #1c212a;
+  --border: #2a313d;
+  --text: #e8ecf3;
+  --text-muted: #8e99ab;
+  --accent: #6ea8fe;
+
+  --board-light: #edeed3;
+  --board-dark: #6f8f5a;
+  --board-edge: #2a2f28;
+
+  --piece-light: #fbfaf5;
+  --piece-dark: #22262c;
+  --piece-outline: #14171b;
+
+  --highlight-last: rgba(255, 214, 84, 0.42);
+  --highlight-select: rgba(255, 214, 84, 0.72);
+  --highlight-move: rgba(20, 30, 20, 0.28);
+  --highlight-check: #e5484d;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+
+  /* Panels float above the background artwork: dark enough to read on,
+     translucent enough to keep the world visible behind them. */
+  --panel-glass: rgba(12, 15, 20, 0.72);
+  --panel-glass-strong: rgba(12, 15, 20, 0.82);
+  --panel-blur: blur(8px);
+  --panel-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  --text-shadow: 0 2px 6px rgba(0, 0, 0, 0.75);
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  /* The world the game sits in. Kept unaltered — no blur, tint or scrim:
+     readability comes from the translucent panels above it instead. */
+  background-color: var(--bg);
+  background-image: url('/ChatGPT Image Aug 15, 2026, 03_22_19 AM.png');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  min-height: 100vh;
+}
+
+/* Headings and loose text sit directly on the artwork. */
+.app__title,
+.app__tagline,
+.menu__title,
+.menu__tagline,
+.screen__title,
+.screen__subtitle,
+.captured__label,
+.captured__none,
+.captured__advantage {
+  text-shadow: var(--text-shadow);
+}
+
+/* …and the muted tone that reads well inside a panel is too faint on it. */
+.app__tagline,
+.menu__tagline,
+.screen__subtitle {
+  color: #c3ccda;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 20px 48px;
+}
+
+.app__header {
+  margin-bottom: 22px;
+}
+
+.app__title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.app__title-mark {
+  color: var(--accent);
+  margin-left: 4px;
+}
+
+.app__tagline {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) 300px;
+  gap: 24px;
+  align-items: start;
+}
+
+.layout__board {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* Keep the whole board on screen without scrolling on typical displays. */
+  width: min(100%, calc(100vh - 210px));
+  margin: 0 auto;
+}
+
+.layout__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 24px;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .layout__sidebar {
+    position: static;
+  }
+}
+
+/* ----------------------------------------------------------------- board */
+
+/*
+ * The board artwork carries its own frame, coordinates (a–i, 1–9) and the
+ * checkered playing surface. The frame element is simply that image; the
+ * interactive 9×9 grid is inset on top of the painted playfield.
+ *
+ * Playfield insets were measured from the asset (1254×1254): the grid runs
+ * from x 99→1158 and y 73→1148, so the cells land exactly on the painted
+ * squares at any board size. Stored as a quality-94 JPEG (596 KB vs 2.4 MB
+ * for the source PNG; no transparency is needed and the re-encode is
+ * visually lossless at 41.6 dB PSNR).
+ */
+.board-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background-image: url('/board.jpg');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  /* Lifts the board off the landscape without dimming the landscape. */
+  filter: drop-shadow(0 18px 50px rgba(0, 0, 0, 0.55));
+}
+
+.board {
+  position: absolute;
+  top: 5.82%;
+  right: 7.58%;
+  bottom: 8.37%;
+  left: 7.89%;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+}
+
+.square {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  /* The artwork underneath provides the checkered surface. */
+  background: transparent;
+  transition: background-color 90ms ease;
+}
+
+.square--last::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--highlight-last);
+}
+
+.square--selected::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--highlight-select);
+}
+
+.square--check::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, var(--highlight-check) 12%, rgba(229, 72, 77, 0) 72%);
+  pointer-events: none;
+}
+
+.square__piece {
+  position: relative;
+  z-index: 2;
+  width: 88%;
+  height: 88%;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+}
+
+.square__piece:active {
+  cursor: grabbing;
+}
+
+.square--dragging .square__piece {
+  opacity: 0.45;
+}
+
+/* move hints */
+
+.hint {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.hint--move {
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: var(--highlight-move);
+}
+
+.hint--capture {
+  inset: 6%;
+  border-radius: 50%;
+  border: 5px solid var(--highlight-move);
+  z-index: 3;
+}
+
+/* ---------------------------------------------------------------- pieces */
+
+.piece {
+  width: 100%;
+  height: 100%;
+  fill: var(--piece-light);
+  stroke: var(--piece-outline);
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
+  pointer-events: none;
+}
+
+.piece--black {
+  fill: var(--piece-dark);
+  stroke: #05070a;
+}
+
+.piece--captured {
+  width: 20px;
+  height: 20px;
+  filter: none;
+  opacity: 0.95;
+}
+
+/* Dark pieces need lifting when shown against the dark panel background. */
+.captured .piece--black {
+  fill: #6c7686;
+  stroke: #39414e;
+}
+
+.captured .piece--white {
+  fill: #dfe4ec;
+  stroke: #39414e;
+}
+
+/* ---------------------------------------------------------------- panels */
+
+.panel,
+.status,
+.banner,
+.controls {
+  background: var(--panel-glass);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+}
+
+.panel__title {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.status--check {
+  border-color: rgba(229, 72, 77, 0.6);
+}
+
+.status--over {
+  border-color: rgba(110, 168, 254, 0.6);
+}
+
+.status__turn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex: none;
+}
+
+.status__turn--white {
+  background: var(--piece-light);
+}
+
+.status__turn--black {
+  background: var(--piece-dark);
+}
+
+.status__headline {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.status__detail {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, rgba(110, 168, 254, 0.16), rgba(110, 168, 254, 0.05));
+  border-color: rgba(110, 168, 254, 0.45);
+}
+
+.banner strong {
+  font-size: 16px;
+}
+
+.banner span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+}
+
+.button {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.button:hover {
+  background: #212734;
+  border-color: #3a4353;
+}
+
+.button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0d1220;
+}
+
+.button--primary:hover {
+  background: #85b6ff;
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+.button--ghost {
+  background: transparent;
+}
+
+/* -------------------------------------------------------------- captures */
+
+.captured {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-glass);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  box-shadow: var(--panel-shadow);
+  font-size: 12px;
+  color: #b9c3d2;
+}
+
+.captured__label {
+  min-width: 108px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.captured__pieces {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-wrap: wrap;
+}
+
+.captured__advantage {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------- history */
+
+.history__scroll {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 8px 6px 10px;
+}
+
+.history__empty {
+  margin: 6px 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.history__row {
+  display: grid;
+  grid-template-columns: 34px 1fr 1fr;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.history__row:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.history__number {
+  color: var(--text-muted);
+}
+
+.history__san--latest {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ----------------------------------------------------------------- modal */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 9, 14, 0.66);
+  backdrop-filter: blur(2px);
+}
+
+.modal__card {
+  position: relative;
+  background: var(--panel-glass-strong);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--panel-shadow);
+  width: min(360px, calc(100vw - 40px));
+}
+
+.modal__title {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+.modal__choices {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.promotion {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.promotion:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.promotion .piece {
+  width: 42px;
+  height: 42px;
+}
+
+/* ------------------------------------------------------------- screens */
+
+.screen {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 20px 48px;
+}
+
+.screen__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.screen__back {
+  flex: none;
+  padding: 8px 12px;
+}
+
+.screen__title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.screen__subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.screen__hint {
+  color: var(--accent);
+}
+
+.swatch {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: inline-block;
+}
+
+.swatch--white { background: var(--piece-light); }
+.swatch--black { background: var(--piece-dark); }
+
+.app__header--row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.app__header--row .button {
+  flex: none;
+}
+
+/* ---------------------------------------------------------------- menu */
+
+.menu {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 40px 20px;
+}
+
+.menu__title {
+  margin: 0;
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.menu__tagline {
+  margin: 0 0 26px;
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+.menu__options {
+  display: grid;
+  gap: 14px;
+  width: min(440px, 90vw);
+}
+
+.menu__option {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel-glass);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  box-shadow: var(--panel-shadow);
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.menu__option:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.menu__option-name {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.menu__option-detail {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------------- builder */
+
+/* The builder claims the viewport: header, tabs and summary keep their natural
+   height and the tab body takes whatever is left, so each column scrolls
+   inside itself rather than the page running past the fold. No column is
+   pinned to a pixel height — they all share the leftover band. */
+.screen--builder {
+  max-width: min(1560px, 100%);
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 2.2vh, 26px);
+}
+
+.screen--builder > * {
+  flex: none;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* Only the active tab's body stretches. */
+.screen--builder > .builder,
+.screen--builder > .deck {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Army on the left, the catalog in the middle, the piece card docked right. */
+.builder {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.85fr) minmax(20rem, 1.6fr) minmax(19rem, 1.05fr);
+  gap: clamp(20px, 2.8vw, 52px);
+  align-items: stretch;
+}
+
+/* Titles stay put; the list beneath them is what scrolls. */
+.builder__army,
+.builder__catalog,
+.deck {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The army panel hugs its contents instead of stretching into empty space. */
+.builder__army {
+  align-self: start;
+  max-height: 100%;
+}
+
+.army,
+.catalog,
+.deck__grid {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.catalog,
+.deck__grid {
+  flex: 1 1 auto;
+}
+
+/* Flex, not grid: a percentage max-height would resolve against an auto-sized
+   track and be ignored, so the card is shrunk by flex instead. */
+.builder__card {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Docked, the card fits the column instead of scrolling: the portrait is the
+   one part allowed to give, so the rules and the Add/Remove footer are always
+   on screen no matter how short the window is. */
+.builder__card .piece-card-overlay__card {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.builder__card .piece-card-overlay__portrait {
+  flex: 0 1 auto;
+  /* Give, but never collapse to a sliver — past this the rules panel scrolls. */
+  min-height: 5rem;
+}
+
+.builder__card .piece-card-overlay__portrait .piece {
+  width: auto;
+  height: 100%;
+  max-height: 190px;
+  aspect-ratio: 1;
+}
+
+.builder__card .piece-card-overlay__rules {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Not enough room for a third column: the card drops beneath the other two and
+   the page goes back to scrolling as a whole. */
+@media (max-width: 1100px) {
+  .screen--builder {
+    height: auto;
+  }
+  .builder {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.4fr);
+  }
+  .builder__card {
+    grid-column: 1 / -1;
+  }
+  .army,
+  .catalog,
+  .deck__grid {
+    overflow-y: visible;
+  }
+}
+
+@media (max-width: 640px) {
+  .builder {
+    grid-template-columns: 1fr;
+  }
+}
+
+.catalog {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+}
+
+.catalog__heading {
+  padding: 12px 8px 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.catalog__heading:first-child {
+  padding-top: 4px;
+}
+
+.catalog__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px 3px 3px;
+}
+
+.catalog__row--active {
+  background: rgba(110, 168, 254, 0.12);
+}
+
+.catalog__info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: none;
+  border: 0;
+  padding: 4px;
+  cursor: pointer;
+  text-align: left;
+  border-radius: var(--radius-sm);
+}
+
+.catalog__icon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.catalog__icon .piece {
+  filter: none;
+}
+
+.catalog__name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.catalog__cost {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.catalog__controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.catalog__count {
+  min-width: 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.catalog__count--some {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.chip {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.chip:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* the card */
+
+.card {
+  background: linear-gradient(180deg, rgba(110, 168, 254, 0.08), rgba(0, 0, 0, 0)) var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  position: sticky;
+  top: 24px;
+}
+
+.card__header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.card__portrait {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  padding: 7px;
+}
+
+.card__name {
+  margin: 0;
+  font-size: 19px;
+}
+
+.card__class {
+  margin: 2px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.card__body {
+  margin: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.card__body dt {
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.card__body dd {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.card__flavor {
+  margin: 0;
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+/* army list */
+
+.army {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  min-height: 60px;
+}
+
+.army__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.army__row--king {
+  opacity: 0.75;
+}
+
+.army__tag {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.builder__footer {
+  border-top: 1px solid var(--border);
+  padding: 12px;
+  display: grid;
+  gap: 9px;
+}
+
+.builder__points {
+  margin: 0;
+  font-size: 14px;
+}
+
+.builder__error {
+  margin: 0;
+  font-size: 12.5px;
+  color: #f2a4a7;
+}
+
+/* ------------------------------------------------------------ placement */
+
+.placement {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) 300px;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .placement {
+    grid-template-columns: 1fr;
+  }
+}
+
+.placement__board {
+  width: min(100%, calc(100vh - 230px));
+  margin: 0 auto;
+}
+
+.placement__status {
+  margin: 10px 2px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  min-height: 18px;
+}
+
+.square--zone {
+  box-shadow: inset 0 0 0 2px rgba(110, 168, 254, 0.35);
+}
+
+.square--zone-active {
+  box-shadow: inset 0 0 0 3px rgba(110, 168, 254, 0.75);
+  cursor: copy;
+}
+
+.square__piece--held {
+  opacity: 0.45;
+}
+
+.placement__side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tray {
+  list-style: none;
+  margin: 0;
+  padding: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tray__piece {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: 74px;
+  padding: 8px 4px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  cursor: grab;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tray__piece .piece {
+  width: 34px;
+  height: 34px;
+  filter: none;
+}
+
+.tray__piece:hover {
+  border-color: var(--accent);
+}
+
+.tray__piece--held {
+  border-color: var(--accent);
+  opacity: 0.6;
+}
+
+.placement__empty {
+  margin: 10px 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.placement__hint {
+  margin: 4px 12px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.placement__confirm {
+  padding: 13px;
+}
+
+/* ------------------------------------------------------- ability extras */
+
+.square__hp {
+  position: absolute;
+  bottom: 5%;
+  right: 6%;
+  display: flex;
+  gap: 2px;
+  z-index: 3;
+}
+
+/* Mini badge marking a unit's original identity (transformed Jester/Spy). */
+.square__origin {
+  position: absolute;
+  top: 3%;
+  right: 4%;
+  width: 30%;
+  height: 30%;
+  z-index: 3;
+  border-radius: 50%;
+  background: rgba(20, 24, 31, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: grid;
+  place-items: center;
+  padding: 2px;
+}
+
+.square__origin .piece {
+  filter: none;
+}
+
+/* A Kingsguard's permitted radius around its King, while selected. */
+.square--radius {
+  box-shadow: inset 0 0 0 2px rgba(110, 168, 254, 0.4);
+}
+
+/* The piece that dies to a highlighted move even though the mover lands
+   elsewhere (Spearman stab, ambush, en passant). */
+.square--victim::after {
+  content: '';
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  border: 4px dashed rgba(229, 72, 77, 0.8);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Selected-piece info panel. */
+.pieceinfo__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.pieceinfo__icon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+}
+
+.pieceinfo__icon .piece {
+  filter: none;
+}
+
+.pieceinfo__body {
+  padding: 10px 14px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.pieceinfo__ability {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.pieceinfo__line {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+/* Legal targets of an armed spell card. */
+.square--spell {
+  box-shadow: inset 0 0 0 3px rgba(186, 130, 255, 0.75);
+}
+
+.square--spell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(150, 90, 240, 0.18);
+  pointer-events: none;
+}
+
+/* Effect badges pinned to the piece. */
+.square__effect {
+  position: absolute;
+  top: 2%;
+  left: 3%;
+  z-index: 4;
+  font-size: clamp(10px, 1.6vw, 15px);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+  pointer-events: none;
+}
+
+.square__effect--freeze {
+  top: auto;
+  bottom: 2%;
+}
+
+/* -------------------------------------------------------- builder tabs */
+
+.builder-tabs {
+  display: flex;
+  flex-wrap: wrap; /* four tabs do not fit one narrow row */
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.builder-tab {
+  position: relative;
+  padding: 9px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--panel-glass);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.builder-tab--active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.builder-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.builder-tab__soon {
+  margin-left: 6px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------- deck builder */
+
+.deck__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  /* Rows keep their own height. Without this the scroll container's spare
+     space is handed to the rows, which stretches the art-less tiles into
+     columns the height of the panel. */
+  align-content: start;
+  gap: clamp(10px, 1vw, 18px);
+  padding: 14px;
+}
+
+/* Tiles without artwork take the printed cards' 2:3 rather than filling
+   whatever row they land in. */
+.deckcard:not(.deckcard--art) {
+  aspect-ratio: 2 / 3;
+  align-content: start;
+  overflow: hidden;
+}
+
+.deckcard {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  text-align: left;
+  padding: 12px 12px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #4a3f66;
+  background: linear-gradient(180deg, #2a2440 0%, #1d1930 100%);
+  cursor: pointer;
+  color: var(--text);
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.deckcard:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #8f6fff;
+}
+
+.deckcard--selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(110, 168, 254, 0.45);
+}
+
+.deckcard--locked {
+  opacity: 0.45;
+}
+
+.deckcard__icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.deckcard__name {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.deckcard__text {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.deckcard__check {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #0d1220;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.deck__full {
+  color: var(--accent);
+}
+
+/* Tiles carrying the official card face: the art IS the tile. */
+.deckcard--art {
+  padding: 0;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  background: #14101f;
+}
+
+.deckcard__artimg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: inherit;
+  user-select: none;
+}
+
+.deckcard--art.deckcard--selected {
+  box-shadow: 0 0 0 3px var(--accent), 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+
+.deck__hint {
+  margin: 0;
+  padding: 0 14px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.builder__summary {
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.builder__summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.builder__summary-grid strong {
+  color: var(--text);
+  margin-right: 6px;
+}
+
+.builder__ok {
+  color: #7fd48a;
+}
+
+.builder__summary-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.builder__summary-actions .button {
+  flex: none;
+}
+
+/* --------------------------------------------------------------- spells */
+
+.spellbar {
+  position: relative;
+}
+
+.spellbar__cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px 6px;
+}
+
+/* Full card-face preview floating beside the sidebar while hovering. */
+.spellbar__preview {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 14px);
+  width: min(272px, 26vw);
+  z-index: 40;
+  pointer-events: none;
+  filter: drop-shadow(0 14px 34px rgba(0, 0, 0, 0.65));
+}
+
+.spellbar__preview img {
+  width: 100%;
+  display: block;
+  border-radius: 12px;
+}
+
+@media (max-width: 900px) {
+  .spellbar__preview {
+    display: none; /* no room to float on small screens; tiles carry the art */
+  }
+}
+
+.spellcard {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 66px;
+  padding: 9px 8px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #4a3f66;
+  background: linear-gradient(180deg, #2a2440 0%, #1d1930 100%);
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text);
+  position: relative;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.spellcard:hover:not(:disabled) {
+  border-color: #8f6fff;
+  transform: translateY(-1px);
+}
+
+.spellcard--active {
+  border-color: #b18cff;
+  box-shadow: 0 0 0 2px rgba(150, 100, 255, 0.35);
+}
+
+.spellcard--used {
+  filter: grayscale(1);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.spellcard__icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.spellcard__name {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.spellcard__tag {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.spellbar__prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 14px 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(150, 100, 255, 0.14);
+  border: 1px solid rgba(150, 100, 255, 0.4);
+  font-size: 12.5px;
+}
+
+.spellbar__cancel {
+  flex: none;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.spellbar__info {
+  margin: 4px 14px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.spellbar__revealed {
+  display: grid;
+  gap: 2px;
+  margin: 4px 14px 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border);
+  font-size: 12px;
+}
+
+.spellbar__revealed-title {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------- card board overlays */
+
+.square--smoke {
+  overflow: hidden;
+}
+
+/* Two independently drifting fog layers, oversized so the billows visibly
+   travel across the square rather than just pulsing in place. */
+.square--smoke::after {
+  content: '';
+  position: absolute;
+  inset: -60%;
+  background:
+    radial-gradient(closest-side at 22% 38%, rgba(210, 216, 228, 0.6), transparent 72%),
+    radial-gradient(closest-side at 68% 22%, rgba(172, 180, 194, 0.5), transparent 68%),
+    radial-gradient(closest-side at 45% 75%, rgba(196, 203, 216, 0.55), transparent 70%),
+    radial-gradient(closest-side at 80% 62%, rgba(184, 192, 206, 0.45), transparent 68%),
+    rgba(150, 158, 172, 0.26);
+  pointer-events: none;
+  z-index: 5;
+  animation: smoke-drift-a 7s ease-in-out infinite alternate;
+}
+
+/* Neighbouring squares desynchronise so the cloud churns as one mass.
+   (::before is left alone — selection and last-move tints live there.) */
+.square--smoke:nth-child(odd)::after {
+  animation-delay: -3.5s;
+  animation-duration: 8.5s;
+}
+
+.square--smoke:nth-child(3n)::after {
+  animation-delay: -6s;
+}
+
+@keyframes smoke-drift-a {
+  0% { transform: translate(-9%, 4%) scale(1); opacity: 0.8; }
+  50% { transform: translate(5%, -7%) scale(1.12); opacity: 0.95; }
+  100% { transform: translate(11%, 6%) scale(1.04); opacity: 0.85; }
+}
+
+
+
+.square--null::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 100, 255, 0.16) 0 2px, transparent 2px 8px),
+    repeating-linear-gradient(90deg, rgba(120, 100, 255, 0.16) 0 2px, transparent 2px 8px);
+  pointer-events: none;
+}
+
+.square--sacred {
+  box-shadow: inset 0 0 14px 3px rgba(255, 216, 110, 0.75);
+}
+
+.square--dead {
+  background:
+    repeating-linear-gradient(45deg, rgba(10, 10, 12, 0.82) 0 6px, rgba(60, 20, 24, 0.82) 6px 12px) !important;
+}
+
+.square--dead::after {
+  content: '☠️';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: clamp(12px, 2vw, 20px);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.square__trap {
+  position: absolute;
+  bottom: 3%;
+  left: 4%;
+  z-index: 4;
+  font-size: clamp(10px, 1.6vw, 15px);
+  opacity: 0.9;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+  pointer-events: none;
+}
+
+.square__trap--revealed {
+  filter: drop-shadow(0 0 4px rgba(229, 72, 77, 0.9));
+}
+
+.square__piece--hidden {
+  display: grid;
+  place-items: center;
+}
+
+.square__fogmark {
+  font-size: clamp(14px, 2.4vw, 24px);
+  font-weight: 800;
+  color: rgba(30, 34, 40, 0.55);
+}
+
+.spellcard--trap {
+  border-color: #6b4a2f;
+  background: linear-gradient(180deg, #35281c 0%, #241a12 100%);
+}
+
+.spellcard--locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.banner--bonus {
+  border-color: rgba(255, 214, 84, 0.5);
+  background: linear-gradient(180deg, rgba(255, 214, 84, 0.14), rgba(255, 214, 84, 0.04));
+}
+
+/* An Ambusher's guard zone while it is selected. */
+.square--guarded::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(229, 72, 77, 0.24),
+    rgba(229, 72, 77, 0.24) 6px,
+    rgba(229, 72, 77, 0.08) 6px,
+    rgba(229, 72, 77, 0.08) 12px
+  );
+  pointer-events: none;
+}
+
+.square__hp-pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e8b23d;
+  border: 1.5px solid rgba(20, 23, 27, 0.85);
+}
+
+.modal__choices--list {
+  grid-template-columns: 1fr;
+}
+
+.modal__choices--list .promotion {
+  justify-items: start;
+  text-align: left;
+  padding: 12px 14px;
+}
+
+.promotion__label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.promotion__detail {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ================================================================
+   Chess 2 — Army Builder Piece Card Overlay
+   Add to src/styles.css
+   ================================================================ */
+
+.piece-card-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.piece-card-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(85, 62, 24, 0.12), transparent 38%),
+    rgba(5, 8, 12, 0.78);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  cursor: default;
+}
+
+.piece-card-overlay__card {
+  position: relative;
+  z-index: 1;
+  /* Sized against the overlay's own padded box rather than vw/vh: 100vw can
+     exceed the visible viewport (scrollbars, pinch-zoom), which pushed the
+     card off-screen on narrow devices. */
+  width: min(520px, 100%);
+  max-height: min(820px, 100%);
+  overflow: auto;
+  border-radius: 18px;
+  border: 2px solid #a8833f;
+  background:
+    linear-gradient(180deg, rgba(31, 45, 31, 0.98) 0 22%, rgba(25, 29, 24, 0.98) 22% 100%);
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.68),
+    inset 0 0 0 4px rgba(9, 12, 10, 0.85),
+    inset 0 0 0 5px rgba(201, 160, 77, 0.25);
+  color: #f2ead7;
+  animation: piece-card-overlay-in 150ms ease-out;
+}
+
+/* Painted cards bring their own frame, so the drawn panel gets out of the way:
+   the image is the card and the roster controls sit under it. `contain` keeps
+   the art at its own aspect at every size — it is never stretched or cropped. */
+.piece-card-overlay__card--art {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.4vh, 14px);
+  width: min(560px, 100%);
+  background: none;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.piece-card-overlay__cardart {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 20px 46px rgba(0, 0, 0, 0.62));
+}
+
+/* No panel behind the buttons, so they centre on the art instead of ruling a
+   line across a box that may be wider than the image. */
+.piece-card-overlay__card--art .piece-card-overlay__footer {
+  border-top: 0;
+  padding: 0;
+  justify-content: center;
+}
+
+.piece-card-overlay__card--art .piece-card-overlay__actions {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 320px;
+}
+
+.piece-card-overlay__card--art .piece-card-overlay__close {
+  top: 18px;
+  right: 18px;
+}
+
+/* Pinned: the kit's sizing — the whole card visible, never taller than the
+   window, never wider than the viewport allows. */
+.piece-card-overlay .piece-card-overlay__card--art {
+  width: auto;
+  max-width: min(92vw, 760px);
+  max-height: 100%;
+}
+
+.piece-card-overlay .piece-card-overlay__cardart {
+  /* Leaves the Add/Remove row inside the window under the 88vh the kit asks
+     for — the card plus its controls is what has to fit, not the card alone. */
+  max-height: 82vh;
+  max-width: min(92vw, 760px);
+  width: auto;
+  height: auto;
+}
+
+@keyframes piece-card-overlay-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.975); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.piece-card-overlay__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(220, 188, 116, 0.45);
+  background: rgba(4, 7, 6, 0.72);
+  color: #e8d6aa;
+  font-size: 23px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.piece-card-overlay__close:hover {
+  border-color: #d5ad59;
+  background: rgba(38, 31, 17, 0.92);
+}
+
+.piece-card-overlay__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 22px 58px 18px 22px;
+  border-bottom: 1px solid rgba(199, 157, 71, 0.4);
+  background:
+    linear-gradient(90deg, rgba(12, 42, 25, 0.9), rgba(20, 29, 21, 0.4)),
+    repeating-linear-gradient(135deg, transparent 0 11px, rgba(255,255,255,0.015) 11px 12px);
+}
+
+.piece-card-overlay__eyebrow {
+  margin: 0 0 4px;
+  color: #c8a75f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.piece-card-overlay__name {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(30px, 6vw, 44px);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #f0dfb3;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+
+.piece-card-overlay__cost {
+  flex: none;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  border: 2px solid #c79b43;
+  background: radial-gradient(circle at 35% 28%, #725b28, #1d1a10 72%);
+  box-shadow: inset 0 0 0 3px rgba(0,0,0,0.5), 0 5px 14px rgba(0,0,0,0.4);
+}
+
+.piece-card-overlay__cost strong {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 27px;
+  line-height: 0.9;
+  color: #f5e2ae;
+}
+
+.piece-card-overlay__cost span {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  color: #cdb87c;
+}
+
+.piece-card-overlay__portrait {
+  position: relative;
+  height: 300px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(199, 157, 71, 0.42);
+  background:
+    radial-gradient(circle at 50% 46%, rgba(114, 145, 95, 0.34), transparent 38%),
+    linear-gradient(180deg, rgba(15, 29, 20, 0.35), rgba(5, 9, 7, 0.92)),
+    repeating-linear-gradient(45deg, rgba(202, 164, 84, 0.035) 0 1px, transparent 1px 14px);
+}
+
+.piece-card-overlay__portrait::before,
+.piece-card-overlay__portrait::after {
+  content: '';
+  position: absolute;
+  width: 210px;
+  height: 210px;
+  border: 1px solid rgba(206, 170, 88, 0.14);
+  transform: rotate(45deg);
+}
+
+.piece-card-overlay__portrait::after {
+  width: 150px;
+  height: 150px;
+  border-color: rgba(206, 170, 88, 0.22);
+}
+
+.piece-card-overlay__portrait-glow {
+  position: absolute;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(218, 186, 111, 0.2), transparent 68%);
+}
+
+.piece-card-overlay__portrait .piece {
+  position: relative;
+  z-index: 1;
+  width: 190px;
+  height: 190px;
+  filter: drop-shadow(0 16px 18px rgba(0,0,0,0.5));
+}
+
+.piece-card-overlay__rules {
+  display: grid;
+  gap: 15px;
+  padding: 21px 22px 16px;
+  background: linear-gradient(180deg, #eee2c2, #d8c8a3);
+  color: #1f211d;
+}
+
+.piece-card-overlay__rules section + section {
+  padding-top: 14px;
+  border-top: 1px solid rgba(74, 61, 33, 0.25);
+}
+
+.piece-card-overlay__rules h3 {
+  margin: 0 0 5px;
+  color: #4f4329;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.piece-card-overlay__rules p {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.piece-card-overlay__flavor {
+  margin: 0;
+  padding: 4px 22px 19px;
+  background: #d8c8a3;
+  color: #5d4a2f;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 14px;
+  font-style: italic;
+  text-align: center;
+}
+
+.piece-card-overlay__footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 14px 16px 16px;
+  border-top: 1px solid rgba(199, 157, 71, 0.4);
+}
+
+.piece-card-overlay__owned {
+  display: grid;
+  min-width: 58px;
+  text-align: center;
+}
+
+.piece-card-overlay__owned span {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #af9c73;
+}
+
+.piece-card-overlay__owned strong {
+  font-size: 24px;
+  color: #f1d899;
+}
+
+.piece-card-overlay__actions {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .piece-card-overlay { padding: 10px; }
+  .piece-card-overlay__card { width: min(100%, 430px); max-height: calc(100vh - 20px); }
+  .piece-card-overlay__portrait { height: 220px; }
+  .piece-card-overlay__portrait .piece { width: 145px; height: 145px; }
+  .piece-card-overlay__actions { grid-template-columns: 1fr; }
+}
+
+/* The card's own actions wear its palette — the app's blue primary button
+   reads as a foreign element inside the gold-and-green frame. */
+.piece-card-overlay__actions .button {
+  border-color: rgba(201, 160, 77, 0.45);
+  background: rgba(18, 22, 18, 0.85);
+  color: #f2ead7;
+}
+
+.piece-card-overlay__actions .button:hover:not(:disabled) {
+  border-color: rgba(226, 190, 110, 0.85);
+  background: rgba(30, 38, 28, 0.9);
+}
+
+.piece-card-overlay__actions .button--primary {
+  border-color: #c9a04d;
+  background: linear-gradient(180deg, #c9a04d 0%, #a8833f 100%);
+  color: #1a1508;
+  font-weight: 700;
+}
+
+.piece-card-overlay__actions .button--primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #e0b862 0%, #bd934a 100%);
+}
+
+.piece-card-overlay__actions .button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+

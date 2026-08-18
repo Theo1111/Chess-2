@@ -1,0 +1,122 @@
+[
+  {
+    "id": "queen",
+    "name": "Queen",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves and captures any distance orthogonally or diagonally.",
+    "ability": "No special ability.",
+    "flavor": "The measure every other legend is judged against."
+  },
+  {
+    "id": "archbishop",
+    "name": "Archbishop",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves and captures one square diagonally.",
+    "ability": "Every diagonally adjacent friendly piece may also move and capture like a Bishop.",
+    "flavor": "His blessing runs along the diagonals."
+  },
+  {
+    "id": "avenger",
+    "name": "Avenger",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves and captures like every friendly piece lost this game.",
+    "ability": "Starts unable to move. Each friendly piece captured permanently adds that piece’s movement.",
+    "flavor": "I become whatever my army has lost."
+  },
+  {
+    "id": "champion",
+    "name": "Champion",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves and captures like a Rook.",
+    "ability": "Survives the first capture attempt against it and destroys the attacking piece instead.",
+    "flavor": "The first blow only makes the armor stronger."
+  },
+  {
+    "id": "chariot",
+    "name": "Chariot",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves and captures like a Rook.",
+    "ability": "When it moves, you may return one of your captured Pawns to the square it left.",
+    "flavor": "It advances, and brings the fallen back with it."
+  },
+  {
+    "id": "diplomat",
+    "name": "Diplomat",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Jumps exactly two squares orthogonally or diagonally, over whatever stands between.",
+    "ability": "Any enemy piece jumped over changes allegiance. Kings are immune.",
+    "flavor": "No blade required — only terms."
+  },
+  {
+    "id": "duelist",
+    "name": "Duelist",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves and captures like a King.",
+    "ability": "After your main move, the Duelist may take one free move.",
+    "flavor": "Fast, precise, relentless."
+  },
+  {
+    "id": "general",
+    "name": "General",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves and captures like a King.",
+    "ability": "While the General is on the board, every friendly piece may also move (but not capture) like a King.",
+    "flavor": "I command everyone around me."
+  },
+  {
+    "id": "infiltrator",
+    "name": "Infiltrator",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves and captures like a Rook or a King.",
+    "ability": "Slides straight through friendly pieces. Enemy pieces still block it.",
+    "flavor": "Walls and allies don't stop me."
+  },
+  {
+    "id": "revolutionary",
+    "name": "Revolutionary",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves and captures like a Knight.",
+    "ability": "On reaching the opponent's back row it may sacrifice itself: both players then swap armies.",
+    "flavor": "Every throne is only ever borrowed."
+  },
+  {
+    "id": "trapper",
+    "name": "Trapper",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves like a Queen. Cannot capture.",
+    "ability": "Adjacent enemy pieces (orthogonally or diagonally) cannot move or capture. Enemy Trappers are unaffected.",
+    "flavor": "Get near me and you are already caught."
+  },
+  {
+    "id": "warrior",
+    "name": "Warrior",
+    "pieceClass": "queen",
+    "classLabel": "Queen-Class",
+    "cost": 9,
+    "movement": "Moves and captures like a Queen or a Knight.",
+    "ability": "Cannot move on two of your turns in a row.",
+    "flavor": "I can fight almost anywhere — but not endlessly."
+  }
+]
