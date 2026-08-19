@@ -8,10 +8,8 @@ import { applyMove, createStateFromFen } from '../../engine/game';
 import { findLegalMove } from '../../engine/moveGeneration';
 import { castSpell } from '../../engine/spells';
 import type { GameState, Square } from '../../engine/types';
-import { DEFAULT_ROSTER_BUDGET } from '../catalog';
+import { DEFAULT_ROSTER_BUDGET, costOfCard } from '../catalog';
 import {
-  SPELL_LOADOUT_SIZE,
-  TRAP_LOADOUT_SIZE,
   availableSpellCards,
   availableTrapCards,
   isLoadoutComplete,
@@ -20,9 +18,19 @@ import {
   toggleTrapCard,
   validateLoadout,
 } from '../loadout';
-import { addUnit, autoPlace, createRoster, mirrorRoster } from '../roster';
+import {
+  addUnit,
+  autoPlace,
+  canAffordCard,
+  cardCost,
+  createRoster,
+  mirrorRoster,
+  remainingBudget,
+  rosterCost,
+  unitCost,
+} from '../roster';
 import { createMatch } from '../setup';
-import { validateRoster } from '../validation';
+import { validateComposition, validateRoster } from '../validation';
 import type { Roster } from '../types';
 
 const sq = (name: string): Square => {
@@ -46,29 +54,63 @@ const armedRoster = (
     trapIds: [...trapIds],
   });
 
-describe('spell loadout selection', () => {
-  it('allows selecting up to five spell cards, and no sixth', () => {
-    let roster = createRoster('white', DEFAULT_ROSTER_BUDGET);
-    const pool = availableSpellCards().map((definition) => definition.id);
-    expect(pool.length).toBeGreaterThanOrEqual(6);
-
-    for (const id of pool.slice(0, 5)) roster = toggleSpellCard(roster, id);
-    expect(roster.spellIds).toHaveLength(SPELL_LOADOUT_SIZE);
-
-    const overfilled = toggleSpellCard(roster, pool[5]!);
-    expect(overfilled.spellIds).toHaveLength(SPELL_LOADOUT_SIZE); // sixth refused
-    expect(overfilled.spellIds).not.toContain(pool[5]);
+describe('shared-budget card pricing', () => {
+  it('every card carries an engine-defined point cost', () => {
+    for (const card of [...availableSpellCards(), ...availableTrapCards()]) {
+      expect(card.cost, card.id).toBeGreaterThanOrEqual(1);
+      expect(costOfCard(card.id)).toBe(card.cost);
+    }
+    // Evidence-based, not uniform: the 25k baseline priced these apart.
+    expect(costOfCard('shield')).toBeGreaterThan(costOfCard('reconnaissance'));
+    expect(costOfCard('mine')).toBeGreaterThan(costOfCard('tripwire'));
   });
 
-  it('removing a spell frees the slot for another', () => {
+  it('cards drain the same budget as pieces', () => {
     let roster = createRoster('white', DEFAULT_ROSTER_BUDGET);
-    for (const id of SPELLS_A) roster = toggleSpellCard(roster, id);
-    roster = toggleSpellCard(roster, 'shield'); // deselect
-    expect(roster.spellIds).toHaveLength(4);
-    roster = toggleSpellCard(roster, 'teleport');
-    expect(roster.spellIds).toHaveLength(5);
-    expect(roster.spellIds).toContain('teleport');
-    expect(roster.spellIds).not.toContain('shield');
+    const before = remainingBudget(roster);
+    roster = toggleSpellCard(roster, 'shield');
+    expect(remainingBudget(roster)).toBe(before - costOfCard('shield'));
+    roster = addUnit(roster, 'rook');
+    expect(rosterCost(roster)).toBe(unitCost(roster) + cardCost(roster));
+    expect(remainingBudget(roster)).toBe(
+      DEFAULT_ROSTER_BUDGET - costOfCard('shield') - 5,
+    );
+  });
+
+  it('refuses a card the remaining budget cannot cover', () => {
+    // Tiny budget: one rook (5) leaves 1 point — Shield (4) must be refused,
+    // a 1-point card still fits.
+    let roster = addUnit(createRoster('white', 6), 'rook');
+    expect(canAffordCard(roster, 'shield')).toBe(false);
+    const refused = toggleSpellCard(roster, 'shield');
+    expect(refused.spellIds).toEqual([]);
+    roster = toggleSpellCard(roster, 'freeze'); // costs 1
+    expect(roster.spellIds).toEqual(['freeze']);
+    expect(remainingBudget(roster)).toBe(0);
+  });
+
+  it('any allotment is legal — card-less or card-heavy', () => {
+    // No cards at all: perfectly valid.
+    const noCards = autoPlace(addUnit(createRoster('white', DEFAULT_ROSTER_BUDGET), 'rook'));
+    expect(validateRoster(noCards, { requirePlacement: true, requireLoadout: true }).valid).toBe(true);
+
+    // Every card in the game: also valid — 55 points cover all 17 cards.
+    let caster = addUnit(createRoster('white', DEFAULT_ROSTER_BUDGET), 'rook');
+    for (const card of [...availableSpellCards(), ...availableTrapCards()]) {
+      caster = card.isTrap ? toggleTrapCard(caster, card.id) : toggleSpellCard(caster, card.id);
+    }
+    expect(caster.spellIds.length).toBe(availableSpellCards().length);
+    expect(caster.trapIds.length).toBe(availableTrapCards().length);
+    expect(validateRoster(autoPlace(caster), { requirePlacement: true }).valid).toBe(true);
+  });
+
+  it('at most one copy of each card', () => {
+    let roster = createRoster('white', DEFAULT_ROSTER_BUDGET);
+    roster = toggleSpellCard(roster, 'freeze');
+    roster = toggleSpellCard(roster, 'freeze'); // toggles OFF, not duplicates
+    expect(roster.spellIds).toEqual([]);
+    const duplicated = { ...roster, spellIds: ['freeze', 'freeze'] };
+    expect(validateLoadout(duplicated).some((e) => e.code === 'duplicate-card')).toBe(true);
   });
 
   it('rejects trap cards and unknown ids in the spell deck', () => {
@@ -76,44 +118,18 @@ describe('spell loadout selection', () => {
     roster = toggleSpellCard(roster, 'tripwire'); // a trap
     roster = toggleSpellCard(roster, 'meteor'); // unknown
     expect(roster.spellIds).toEqual([]);
-  });
-});
-
-describe('trap loadout selection', () => {
-  it('is fully independent of the spell deck', () => {
-    let roster = createRoster('white', DEFAULT_ROSTER_BUDGET);
-    for (const id of SPELLS_A) roster = toggleSpellCard(roster, id);
-    // Spell deck full — the trap deck still accepts five of its own.
-    for (const id of TRAPS_A) roster = toggleTrapCard(roster, id);
-    expect(roster.spellIds).toHaveLength(5);
-    expect(roster.trapIds).toHaveLength(5);
-
-    // And vice versa: trap selections never consumed spell slots.
-    expect(roster.spellIds).toEqual(SPELLS_A);
-    expect(roster.trapIds).toEqual(TRAPS_A);
-  });
-
-  it('caps at five traps and refuses spells in the trap deck', () => {
-    let roster = createRoster('white', DEFAULT_ROSTER_BUDGET);
-    for (const id of TRAPS_A) roster = toggleTrapCard(roster, id);
-    expect(roster.trapIds).toHaveLength(TRAP_LOADOUT_SIZE);
-    expect(availableTrapCards().length).toBeGreaterThanOrEqual(TRAP_LOADOUT_SIZE);
-
     const withSpell = toggleTrapCard(roster, 'shield');
     expect(withSpell.trapIds).not.toContain('shield');
   });
 });
 
 describe('validation and persistence', () => {
-  it('an army needs 5/5 spells and 5/5 traps, with clear feedback', () => {
-    let roster = createRoster('white', DEFAULT_ROSTER_BUDGET);
-    for (const id of SPELLS_A.slice(0, 3)) roster = toggleSpellCard(roster, id);
-    for (const id of TRAPS_A.slice(0, 4)) roster = toggleTrapCard(roster, id);
-
-    const errors = validateLoadout(roster);
-    expect(errors.some((e) => e.message === 'Select 2 more Spell Cards to complete this army.')).toBe(true);
-    expect(errors.some((e) => e.message === 'Select 1 more Trap Card to complete this army.')).toBe(true);
-    expect(isLoadoutComplete(roster)).toBe(false);
+  it('over-budget card spending fails composition, with clear feedback', () => {
+    let roster = addUnit(createRoster('white', 10), 'rook'); // 5 of 10 spent
+    roster = { ...roster, spellIds: ['shield', 'last-stand'] }; // 8 more, forced
+    const errors = validateComposition(roster);
+    expect(errors.some((e) => e.code === 'over-budget')).toBe(true);
+    expect(errors.find((e) => e.code === 'over-budget')!.message).toContain('cards');
   });
 
   it('saved armies preserve both decks, and different armies differ', () => {
@@ -141,7 +157,7 @@ describe('validation and persistence', () => {
     expect(roster.trapIds).toEqual(TRAPS_A);
   });
 
-  it('older armies without card fields load safely as incomplete', () => {
+  it('older armies without card fields load safely (cards now optional)', () => {
     const legacy = JSON.parse(
       JSON.stringify({
         color: 'white',
@@ -153,7 +169,7 @@ describe('validation and persistence', () => {
     const upgraded = normalizeRoster(legacy);
     expect(upgraded.spellIds).toEqual([]);
     expect(upgraded.trapIds).toEqual([]);
-    expect(isLoadoutComplete(upgraded)).toBe(false);
+    expect(isLoadoutComplete(upgraded)).toBe(true); // no minimum any more
     // Unknown ids in a corrupted save are dropped, not fatal.
     const corrupt = normalizeRoster({ ...upgraded, spellIds: ['shield', 'nonsense'], trapIds: ['shield'] });
     expect(corrupt.spellIds).toEqual(['shield']);
@@ -188,11 +204,19 @@ describe('match integration', () => {
     expect(castSpell(game, { spell: 'shield', color: 'white', targets: [own] })).not.toBeNull();
   });
 
-  it('an incomplete loadout cannot start a standard match', () => {
-    const white = { ...armedRoster('white'), spellIds: SPELLS_A.slice(0, 4) };
+  it('a card-less army starts a match with an empty book', () => {
+    const white = armedRoster('white', [], []);
+    const black = armedRoster('black', SPELLS_B, TRAPS_A);
+    const { game } = createMatch(white, black);
+    expect(game.spells.white.available).toEqual([]);
+    expect(game.spells.black.available.length).toBeGreaterThan(0);
+  });
+
+  it('an over-budget loadout cannot start a match', () => {
+    const white = { ...armedRoster('white'), budget: 10 }; // cards alone exceed 10
     const black = armedRoster('black');
-    expect(() => createMatch(white, black)).toThrow(/Spell Card/);
-    expect(validateRoster(white, { requireLoadout: true }).valid).toBe(false);
+    expect(() => createMatch(white, black)).toThrow(/budget/);
+    expect(validateRoster(white).valid).toBe(false);
   });
 
   it('a new game from the same rosters does not alter the saved loadout', () => {

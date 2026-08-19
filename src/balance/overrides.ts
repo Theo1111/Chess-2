@@ -1,5 +1,7 @@
 /**
- * Temporary cost overrides for balance experiments (`--override champion=10`).
+ * Temporary cost overrides for balance experiments (`--override champion=10`
+ * or `--override shield=3` — pieces and cards share the point system, so
+ * both are overridable by id).
  *
  * Cost is gameplay-relevant (Sacrifice pairs pieces by point value, army
  * budgets spend it), so an honest experiment must run with the override live
@@ -9,24 +11,36 @@
  * definitions on disk are never modified.
  */
 
-import { getPieceDefinition, registerPiece, type PieceDefinition } from '../engine';
+import {
+  getPieceDefinition,
+  getSpellDefinition,
+  hasPieceDefinition,
+  registerPiece,
+  registerSpell,
+} from '../engine';
 
 export type CostOverrides = Readonly<Record<string, number>>;
 
 export function withCostOverrides<T>(overrides: CostOverrides, run: () => T): T {
-  const originals: PieceDefinition[] = [];
-  for (const [type, cost] of Object.entries(overrides)) {
-    const original = getPieceDefinition(type); // throws on unknown pieces
+  const restores: (() => void)[] = [];
+  for (const [id, cost] of Object.entries(overrides)) {
     if (!Number.isInteger(cost) || cost < 1) {
-      throw new Error(`Override for ${type} must be a positive integer, got ${cost}`);
+      throw new Error(`Override for ${id} must be a positive integer, got ${cost}`);
     }
-    originals.push(original);
-    registerPiece({ ...original, cost });
+    if (hasPieceDefinition(id)) {
+      const original = getPieceDefinition(id);
+      restores.push(() => registerPiece(original));
+      registerPiece({ ...original, cost });
+    } else {
+      const original = getSpellDefinition(id); // throws on fully unknown ids
+      restores.push(() => registerSpell(original));
+      registerSpell({ ...original, cost });
+    }
   }
   try {
     return run();
   } finally {
-    for (const original of originals) registerPiece(original);
+    for (const restore of restores) restore();
   }
 }
 

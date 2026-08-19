@@ -77,11 +77,12 @@ export function validateComposition(roster: Roster): RosterError[] {
     });
   }
 
+  // Pieces AND cards drain the same pool.
   const cost = rosterCost(roster);
   if (cost > roster.budget) {
     errors.push({
       code: 'over-budget',
-      message: `Army costs ${cost} points; the budget is ${roster.budget}.`,
+      message: `Army costs ${cost} points (pieces and cards); the budget is ${roster.budget}.`,
     });
   }
 

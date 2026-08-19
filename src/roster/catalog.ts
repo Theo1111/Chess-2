@@ -7,11 +7,22 @@
  * team builder and validation pick it up with no changes.
  */
 
-import { allPieceDefinitions, getPieceDefinition, hasPieceDefinition } from '../engine';
+import {
+  allPieceDefinitions,
+  getPieceDefinition,
+  getSpellDefinition,
+  hasPieceDefinition,
+} from '../engine';
 import type { PieceClass, PieceDefinition, PieceType } from '../engine';
 
-/** Default roster budget. The King is free and does not count against it. */
-export const DEFAULT_ROSTER_BUDGET = 42;
+/**
+ * Default roster budget — ONE pool shared by pieces, spells and traps. The
+ * King is free and does not count against it. (Raised from 42 when cards
+ * were priced in: the classic 5-spell/5-trap loadout costs 11 points, so 55
+ * keeps the traditional army size reachable while letting players trade
+ * cards for pieces and vice versa.)
+ */
+export const DEFAULT_ROSTER_BUDGET = 55;
 
 /** The piece every army must field, outside the budget. */
 export const MANDATORY_PIECE: PieceType = 'king';
@@ -49,3 +60,12 @@ export function draftablePiecesByClass(pieceClass: PieceClass): PieceDefinition[
 /** Roster cost of a piece type. Unknown or free pieces cost nothing. */
 export const costOf = (type: PieceType): number =>
   hasPieceDefinition(type) ? (getPieceDefinition(type).cost ?? 0) : 0;
+
+/** Roster cost of a spell/trap card. Unknown or free cards cost nothing. */
+export const costOfCard = (id: string): number => {
+  try {
+    return getSpellDefinition(id).cost ?? 0;
+  } catch {
+    return 0;
+  }
+};

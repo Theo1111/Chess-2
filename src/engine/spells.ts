@@ -49,6 +49,12 @@ export interface SpellDefinition {
   /** Emoji used on the card and in compact UI. */
   readonly icon: string;
   readonly description: string;
+  /**
+   * Roster point cost — cards share the army budget with pieces. Data here,
+   * exactly like piece costs, so the builder, validation and the balance
+   * laboratory all read one source of truth. Omitted = free.
+   */
+  readonly cost?: number;
   readonly targeting: SpellTargeting;
   /** Legal first targets (piece squares), for targeting UIs and validation. */
   readonly primaryTargets?: (state: GameState, caster: Color) => Square[];
@@ -140,6 +146,21 @@ const friendlyPieces = (state: GameState, caster: Color, includeRoyal: boolean):
 const enemyPieces = (state: GameState, caster: Color, includeRoyal: boolean): Square[] =>
   friendlyPieces(state, opposite(caster), includeRoyal);
 
+/*
+ * Card point costs — evidence-based, not uniform.
+ *
+ * Priced from the 25,000-game GreedyBot baseline (balance-results/
+ * baseline-v1, seed 42): each spell's cost tracks its adjusted marginal win
+ * contribution in the logistic model (+2.6pp Shield/Last Stand → 4pts, down
+ * to −3.2pp Recon → 1pt). Trap coefficients were unidentifiable in that run
+ * (the old fixed loadout put all five traps in every army — zero selection
+ * variance), so traps are priced from behavioral telemetry instead: Mine and
+ * Web Trap fire most with material/tempo impact (2), Tripwire/Sonar/Dead
+ * Zone rarely fire or only gather information (1). Smoke Screen and Recon
+ * are modelled at limited fidelity — their prices are the least trusted and
+ * first in line for re-pricing once information-set search exists.
+ */
+
 /* ------------------------------------------------------------------ */
 /* The five starter cards                                              */
 /* ------------------------------------------------------------------ */
@@ -148,6 +169,7 @@ registerSpell({
   id: 'shield',
   name: 'Shield',
   icon: '🛡️',
+  cost: 4,
   description:
     'Choose a friendly piece. It cannot be captured — by any means — until your next turn begins.',
   targeting: 'friendly-piece',
@@ -174,6 +196,7 @@ registerSpell({
   id: 'reveal',
   name: 'Reveal',
   icon: '👁️',
+  cost: 2,
   description:
     "See the opponent's remaining spell cards. The knowledge lasts for the rest of the game.",
   targeting: 'none',
@@ -193,6 +216,7 @@ registerSpell({
   id: 'freeze',
   name: 'Freeze',
   icon: '❄️',
+  cost: 1,
   description:
     "Choose an enemy piece. It cannot move or act during the opponent's next turn.",
   targeting: 'enemy-piece',
@@ -222,6 +246,7 @@ registerSpell({
   id: 'teleport',
   name: 'Teleport',
   icon: '✨',
+  cost: 1,
   description:
     'Move a friendly piece to any empty square of the same colour as the one it stands on.',
   targeting: 'friendly-piece-then-square',
@@ -251,6 +276,7 @@ registerSpell({
   id: 'sacrifice',
   name: 'Sacrifice',
   icon: '⚔️',
+  cost: 3,
   description:
     'Destroy one of your pieces and one adjacent enemy piece of equal point value. Destruction is not a capture.',
   targeting: 'friendly-piece-then-adjacent-enemy',
@@ -319,6 +345,7 @@ registerSpell({
   id: 'smoke-screen',
   name: 'Smoke Screen',
   icon: '🌫️',
+  cost: 2,
   description:
     'Cover a 3×3 area in smoke for two full rounds. Your opponent cannot see the pieces inside; play continues normally.',
   targeting: 'square',
@@ -366,6 +393,7 @@ registerSpell({
   id: 'reconnaissance',
   name: 'Recon',
   icon: '🔍',
+  cost: 1,
   description:
     "Glimpse up to two random cards from the opponent's remaining hand. The cards stay hidden afterwards and are not removed.",
   targeting: 'none',
@@ -378,6 +406,7 @@ registerSpell({
   id: 'royal-order',
   name: 'Royal Order',
   icon: '📯',
+  cost: 3,
   description:
     'Command the ranks: after your normal move this turn, one of your Pawns may immediately make one extra legal move.',
   targeting: 'none',
@@ -392,6 +421,7 @@ registerSpell({
   id: 'last-stand',
   name: 'Last Stand',
   icon: '🔰',
+  cost: 4,
   description:
     'Outnumbered only: a friendly piece survives the next attempt to capture it (the attacker is lost in the attempt).',
   targeting: 'friendly-piece',
@@ -412,6 +442,7 @@ registerSpell({
   id: 'interference',
   name: 'Interference',
   icon: '⚡',
+  cost: 2,
   description: 'Disable one revealed enemy trap. It never fires.',
   targeting: 'square',
   castable: (state, caster) =>
@@ -432,6 +463,7 @@ registerSpell({
   id: 'null-field',
   name: 'Null Field',
   icon: '🌀',
+  cost: 1,
   description:
     'Suppress magic in a 3×3 area until your next turn: no spell may target anything inside. Traps and normal chess are unaffected.',
   targeting: 'square',
@@ -454,6 +486,7 @@ registerSpell({
   id: 'sacred-ground',
   name: 'Sacred Ground',
   icon: '🌟',
+  cost: 2,
   description:
     'Consecrate a square for one full round: whichever piece stands on it cannot be affected by cards. Chess itself is not suspended.',
   targeting: 'square',
@@ -479,12 +512,14 @@ function registerTrap(config: {
   id: TrapKind;
   name: string;
   icon: string;
+  cost: number;
   description: string;
 }): void {
   registerSpell({
     id: config.id,
     name: config.name,
     icon: config.icon,
+    cost: config.cost,
     description: config.description,
     targeting: 'square',
     isTrap: true,
@@ -518,6 +553,7 @@ registerTrap({
   id: 'tripwire',
   name: 'Tripwire',
   icon: '🪤',
+  cost: 1,
   description:
     'Hidden. An enemy piece that travels across this square is stopped on it, short of its destination, and forfeits any bonus move.',
 });
@@ -526,6 +562,7 @@ registerTrap({
   id: 'sonar',
   name: 'Sonar',
   icon: '📡',
+  cost: 1,
   description:
     'Hidden. When an enemy lands here, it scans the surrounding 3×3 area and reveals every hidden enemy trap inside. Detection only — nothing is disabled.',
 });
@@ -534,6 +571,7 @@ registerTrap({
   id: 'web-trap',
   name: 'Web Trap',
   icon: '🕸️',
+  cost: 2,
   description:
     'Hidden. The enemy piece that lands here is webbed: it cannot move at its next opportunity, though it stays fully exposed to cards and captures.',
 });
@@ -542,6 +580,7 @@ registerTrap({
   id: 'mine',
   name: 'Mine',
   icon: '💣',
+  cost: 2,
   description:
     'Hidden. Destroys the enemy piece that lands on it. Destruction, not capture — no on-capture ability triggers, and Kings survive the blast.',
 });
@@ -550,6 +589,7 @@ registerTrap({
   id: 'dead-zone',
   name: 'Dead Zone',
   icon: '☠️',
+  cost: 1,
   description:
     'Hidden. Arms under the enemy piece that lands here; once that piece leaves by any means, the square becomes impassable terrain for one full round.',
 });

@@ -16,10 +16,27 @@ import {
   type Square,
 } from '../../engine';
 import { PieceIcon } from '../pieces/PieceIcon';
-import type { ChessGameController } from '../useChessGame';
+import type { GameState } from '../../engine';
+
+/**
+ * The slice of a game controller the board actually consumes. Local play
+ * passes `useChessGame`'s full controller; online play passes
+ * `useOnlineController`, which submits moves to the server instead of
+ * applying them. The board cannot tell the difference — by design.
+ */
+export interface BoardController {
+  readonly game: GameState;
+  readonly selected: Square | null;
+  readonly movesBySquare: ReadonlyMap<Square, Move[]>;
+  readonly lastMove: Move | null;
+  readonly checkSquare: Square | null;
+  readonly spellTargets: ReadonlySet<Square>;
+  readonly selectSquare: (square: Square) => void;
+  readonly tryMove: (from: Square, to: Square) => boolean;
+}
 
 interface BoardProps {
-  controller: ChessGameController;
+  controller: BoardController;
 }
 
 const RANKS = Array.from({ length: RANK_COUNT }, (_, index) => RANK_COUNT - 1 - index);

@@ -9,5 +9,10 @@ balance-results/
 .DS_Store
 *.log
 
+# Supabase credentials — set locally, never committed
+.env
+.env.local
+.env.*.local
+
 # Local-only Claude settings
 .claude/settings.local.json

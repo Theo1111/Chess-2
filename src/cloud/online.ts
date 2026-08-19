@@ -1,0 +1,151 @@
+/**
+ * Online play — client calls for matchmaking and the shared action log.
+ *
+ * Same contract as the rest of `src/cloud`: plain result objects, never
+ * throws, unconfigured builds answer with a clear error string. All writes
+ * go through the SECURITY DEFINER functions in `supabase/online.sql`; there
+ * is no direct table write anywhere in the client.
+ */
+
+import type { Color } from '../engine';
+import type { GameAction } from '../ai/actions';
+import { CLOUD_SETUP_HINT, getSupabase } from './supabaseClient';
+
+export interface OnlineGameRow {
+  readonly id: string;
+  readonly white_id: string;
+  readonly black_id: string;
+  readonly white_name: string;
+  readonly black_name: string;
+  readonly status: 'active' | 'finished';
+  readonly turn: Color;
+  readonly actions: readonly GameAction[];
+  readonly winner: Color | 'draw' | null;
+  readonly reason: string | null;
+  readonly time_control: string;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+interface Result {
+  readonly error: string | null;
+}
+
+const NOT_CONFIGURED: Result = { error: CLOUD_SETUP_HINT };
+
+/**
+ * Atomically pair with the oldest waiting player on the same time control,
+ * or join the queue. `gameId` is null while queued.
+ */
+export async function findOnlineMatch(
+  timeControl: string,
+  displayName: string,
+): Promise<Result & { gameId: string | null }> {
+  const supabase = await getSupabase();
+  if (!supabase) return { ...NOT_CONFIGURED, gameId: null };
+
+  const { data, error } = await supabase.rpc('find_online_match', {
+    p_time_control: timeControl,
+    p_display_name: displayName,
+  });
+  return { gameId: (data as string | null) ?? null, error: error?.message ?? null };
+}
+
+/** The caller's most recent live game — how a queued player finds a pairing. */
+export async function myActiveOnlineGame(): Promise<Result & { gameId: string | null }> {
+  const supabase = await getSupabase();
+  if (!supabase) return { ...NOT_CONFIGURED, gameId: null };
+
+  const { data, error } = await supabase.rpc('my_active_online_game');
+  return { gameId: (data as string | null) ?? null, error: error?.message ?? null };
+}
+
+export async function cancelMatchmaking(): Promise<Result> {
+  const supabase = await getSupabase();
+  if (!supabase) return NOT_CONFIGURED;
+  const { error } = await supabase.rpc('cancel_matchmaking');
+  return { error: error?.message ?? null };
+}
+
+export async function fetchOnlineGame(
+  gameId: string,
+): Promise<Result & { game: OnlineGameRow | null }> {
+  const supabase = await getSupabase();
+  if (!supabase) return { ...NOT_CONFIGURED, game: null };
+
+  const { data, error } = await supabase
+    .from('online_games')
+    .select('*')
+    .eq('id', gameId)
+    .maybeSingle();
+  return { game: (data as OnlineGameRow | null) ?? null, error: error?.message ?? null };
+}
+
+/**
+ * Append one action at position `expectedPly`. The server rejects stale
+ * appends ("out of date") and turn violations; callers refetch and retry.
+ */
+export async function submitOnlineAction(
+  gameId: string,
+  expectedPly: number,
+  action: GameAction,
+  nextTurn: Color,
+): Promise<Result> {
+  const supabase = await getSupabase();
+  if (!supabase) return NOT_CONFIGURED;
+
+  const { error } = await supabase.rpc('submit_online_action', {
+    p_game: gameId,
+    p_expected_ply: expectedPly,
+    p_action: action,
+    p_next_turn: nextTurn,
+  });
+  return { error: error?.message ?? null };
+}
+
+export async function finishOnlineGame(
+  gameId: string,
+  winner: Color | 'draw' | null,
+  reason: string,
+): Promise<Result> {
+  const supabase = await getSupabase();
+  if (!supabase) return NOT_CONFIGURED;
+
+  const { error } = await supabase.rpc('finish_online_game', {
+    p_game: gameId,
+    p_winner: winner,
+    p_reason: reason,
+  });
+  return { error: error?.message ?? null };
+}
+
+/**
+ * Realtime updates for one game row. Returns an unsubscribe function.
+ * Callers should keep a poll fallback: realtime can be disabled per project
+ * and websockets drop silently on bad networks.
+ */
+export function subscribeToOnlineGame(
+  gameId: string,
+  onRow: (row: OnlineGameRow) => void,
+): () => void {
+  let cleanup: (() => void) | null = null;
+  let cancelled = false;
+
+  void getSupabase().then((supabase) => {
+    if (!supabase || cancelled) return;
+    const channel = supabase
+      .channel(`online-game-${gameId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'online_games', filter: `id=eq.${gameId}` },
+        (payload) => onRow(payload.new as OnlineGameRow),
+      )
+      .subscribe();
+    cleanup = () => void supabase.removeChannel(channel);
+  });
+
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
+}

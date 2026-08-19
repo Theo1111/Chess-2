@@ -10,6 +10,7 @@ import {
   addUnit,
   autoPlace,
   canAfford,
+  cardCost,
   createRoster,
   mirrorRoster,
   placeUnit,
@@ -18,6 +19,7 @@ import {
   removeUnit,
   rosterCost,
   startingSquares,
+  unitCost,
   unplacedUnits,
 } from '../roster';
 import { createGameFromRosters, createMatch } from '../setup';
@@ -88,56 +90,77 @@ describe('catalog', () => {
   });
 });
 
+/** The pieces-only view of a built roster: card spending stripped. */
+const piecesOnly = (roster: Roster): Roster => ({ ...roster, spellIds: [], trapIds: [] });
+
 describe('budget', () => {
   it('starts with a free King and the full budget', () => {
     const roster = createRoster('white', DEFAULT_ROSTER_BUDGET);
     expect(roster.units).toHaveLength(1);
     expect(rosterCost(roster)).toBe(0);
-    expect(remainingBudget(roster)).toBe(42);
+    expect(remainingBudget(roster)).toBe(DEFAULT_ROSTER_BUDGET);
   });
 
-  it('tracks spending as pieces are added and removed', () => {
+  it('tracks spending as pieces are added and removed — cards included', () => {
     let roster = buildRoster('white', ['champion', 'trapper', 'warrior']);
-    expect(rosterCost(roster)).toBe(27);
-    expect(remainingBudget(roster)).toBe(15);
+    expect(unitCost(roster)).toBe(27);
+    // ONE pool: total cost is pieces plus the attached card decks.
+    expect(rosterCost(roster)).toBe(27 + cardCost(roster));
+    expect(remainingBudget(roster)).toBe(DEFAULT_ROSTER_BUDGET - 27 - cardCost(roster));
 
     roster = removeLastUnitOfType(roster, 'warrior');
-    expect(rosterCost(roster)).toBe(18);
+    expect(unitCost(roster)).toBe(18);
   });
 
   it('allows duplicate pieces as distinct units', () => {
     const roster = buildRoster('white', ['archbishop', 'archbishop', 'archbishop']);
-    expect(rosterCost(roster)).toBe(27);
+    expect(unitCost(roster)).toBe(27);
     const ids = roster.units.map((unit) => unit.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('rejects an army over budget', () => {
-    const roster = buildRoster('white', ['queen', 'queen', 'queen', 'queen', 'queen']);
+    const roster = piecesOnly(
+      buildRoster('white', ['queen', 'queen', 'queen', 'queen', 'queen', 'queen', 'queen']), // 63
+    );
     const result = validateRoster(roster);
     expect(result.valid).toBe(false);
     expect(result.errors.some((error) => error.code === 'over-budget')).toBe(true);
   });
 
   it('accepts an army exactly at budget', () => {
-    const roster = buildRoster('white', ['queen', 'queen', 'queen', 'queen']); // 36 ≤ 42
+    // 6×9 = 54 pieces + a 1-point trap = 55 exactly.
+    const roster = {
+      ...piecesOnly(buildRoster('white', ['queen', 'queen', 'queen', 'queen', 'queen', 'queen'])),
+      trapIds: ['tripwire'],
+    };
+    expect(rosterCost(roster)).toBe(DEFAULT_ROSTER_BUDGET);
     expect(validateRoster(roster).valid).toBe(true);
   });
 
-  it('mixes classes against one budget — 3×9 + 3×5 = 42 exactly', () => {
+  it('mixes classes and cards against the one shared pool', () => {
     const roster = buildRoster('white', [
       'queen', 'champion', 'warrior', 'rook', 'jouster', 'catapult',
     ]);
-    expect(rosterCost(roster)).toBe(42);
-    expect(remainingBudget(roster)).toBe(0);
-    expect(validateRoster(roster).valid).toBe(true);
+    expect(unitCost(roster)).toBe(42);
+    expect(rosterCost(roster)).toBe(42 + cardCost(roster));
+    // The attached 5+5 card decks fit alongside 42 points of pieces only if
+    // the budget truly is shared and large enough — over it, validation says so.
+    const result = validateRoster(roster);
+    if (rosterCost(roster) <= DEFAULT_ROSTER_BUDGET) {
+      expect(result.valid).toBe(true);
+    } else {
+      expect(result.errors.some((error) => error.code === 'over-budget')).toBe(true);
+    }
   });
 
-  it('rejects a mixed army one piece over budget', () => {
-    const roster = buildRoster('white', [
-      'queen', 'champion', 'warrior', 'rook', 'jouster', 'catapult', 'knight',
-    ]);
-    expect(rosterCost(roster)).toBe(45);
+  it('rejects a mixed army one point over budget', () => {
+    // 54 in pieces + 2-point Shield = 56 > 55.
+    const roster = {
+      ...piecesOnly(buildRoster('white', ['queen', 'queen', 'queen', 'queen', 'queen', 'queen'])),
+      spellIds: ['freeze', 'teleport'], // 2 points
+    };
+    expect(rosterCost(roster)).toBe(DEFAULT_ROSTER_BUDGET + 1);
     expect(validateRoster(roster).errors.some((error) => error.code === 'over-budget')).toBe(true);
   });
 

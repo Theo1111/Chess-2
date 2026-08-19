@@ -44,7 +44,20 @@ const newSession = (game: GameState): GameSession => ({
   casting: null,
 });
 
-export function useChessGame(createGame: () => GameState = createInitialState) {
+const NEVER_LOCKED = (): boolean => false;
+
+/**
+ * @param isLocked Blocks all board input while it returns true — for
+ *   match-level endings the engine's position does not know about, such as a
+ *   fallen clock flag. A getter rather than a boolean because the clock is
+ *   derived from this hook's own game state; reading it lazily is what keeps
+ *   that circle from forming. The engine stays the authority on chess; this
+ *   is the seam for rules layered over it.
+ */
+export function useChessGame(
+  createGame: () => GameState = createInitialState,
+  isLocked: () => boolean = NEVER_LOCKED,
+) {
   const [session, setSession] = useState<GameSession>(() => newSession(createGame()));
   const { game, selected, pendingChoice, casting } = session;
 
@@ -81,6 +94,7 @@ export function useChessGame(createGame: () => GameState = createInitialState) {
   /** Arms (or disarms) a spell card. Untargeted spells cast immediately. */
   const selectSpell = useCallback(
     (spell: string) => {
+      if (isLocked()) return;
       setSession((current) => {
         const state = current.game;
         if (isGameOver(state) || state.phase !== 'main') return current;
@@ -94,7 +108,7 @@ export function useChessGame(createGame: () => GameState = createInitialState) {
         return { ...current, selected: null, pendingChoice: null, casting: { spell, first: null } };
       });
     },
-    [],
+    [isLocked],
   );
 
   const cancelSpell = useCallback(() => {
@@ -119,6 +133,7 @@ export function useChessGame(createGame: () => GameState = createInitialState) {
   /** Attempts a move; opens the choice picker when the move is ambiguous. */
   const tryMove = useCallback(
     (from: Square, to: Square): boolean => {
+      if (isLocked()) return false;
       const candidates = legalMovesBetween(game, from, to);
       const first = candidates[0];
       if (!first) return false;
@@ -134,13 +149,13 @@ export function useChessGame(createGame: () => GameState = createInitialState) {
       commit(game, first);
       return true;
     },
-    [game, commit],
+    [game, commit, isLocked],
   );
 
   /** Single entry point for a click on a square. */
   const selectSquare = useCallback(
     (square: Square) => {
-      if (pendingChoice || isGameOver(game)) return;
+      if (isLocked() || pendingChoice || isGameOver(game)) return;
 
       // An armed spell swallows board clicks until cast or cancelled.
       if (casting) {
@@ -181,15 +196,15 @@ export function useChessGame(createGame: () => GameState = createInitialState) {
         selected: canSelect(square) && square !== selected ? square : null,
       }));
     },
-    [pendingChoice, game, selected, tryMove, canSelect, casting, spellTargets],
+    [isLocked, pendingChoice, game, selected, tryMove, canSelect, casting, spellTargets],
   );
 
   const chooseMove = useCallback(
     (move: Move) => {
-      if (!pendingChoice) return;
+      if (isLocked() || !pendingChoice) return;
       commit(game, move);
     },
-    [game, pendingChoice, commit],
+    [game, pendingChoice, commit, isLocked],
   );
 
   const cancelChoice = useCallback(() => {
@@ -198,8 +213,9 @@ export function useChessGame(createGame: () => GameState = createInitialState) {
 
   /** Ends the optional free-move phase without using it. */
   const passBonus = useCallback(() => {
+    if (isLocked()) return;
     setSession((current) => newSession(skipBonusMove(current.game)));
-  }, []);
+  }, [isLocked]);
 
   const newGame = useCallback(() => setSession(newSession(createGame())), [createGame]);
 

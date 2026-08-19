@@ -64,6 +64,7 @@ function pieceEssence(definition: PieceDefinition): Record<string, unknown> {
 function spellEssence(definition: SpellDefinition): Record<string, unknown> {
   return {
     id: definition.id,
+    cost: definition.cost,
     targeting: definition.targeting,
     isTrap: definition.isTrap ?? false,
     pieceStages: definition.pieceStages,

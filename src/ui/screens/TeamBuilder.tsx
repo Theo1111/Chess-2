@@ -3,12 +3,12 @@ import type { Color, PieceDefinition, PieceType, SpellDefinition } from '../../e
 import {
   AVAILABLE_CLASSES,
   CLASS_LABELS,
-  SPELL_LOADOUT_SIZE,
-  TRAP_LOADOUT_SIZE,
   addUnit,
   availableSpellCards,
   availableTrapCards,
   canAfford,
+  canAffordCard,
+  cardCost,
   costOf,
   draftablePieces,
   isCompositionLegal,
@@ -19,6 +19,7 @@ import {
   rosterCost,
   toggleSpellCard,
   toggleTrapCard,
+  unitCost,
   validateComposition,
   validateLoadout,
   type Roster,
@@ -36,7 +37,7 @@ interface TeamBuilderProps {
   onMirror?: () => void;
 }
 
-type BuilderTab = 'pieces' | 'spells' | 'traps' | 'operator';
+type BuilderTab = 'pieces' | 'cards' | 'operator';
 
 export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirror }: TeamBuilderProps) {
   const catalog = useMemo(() => draftablePieces(), []);
@@ -121,69 +122,75 @@ export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirr
     );
   };
 
-  /** One deck-building grid, shared by the Spells and Traps tabs. */
-  const renderDeck = (
-    kind: 'spells' | 'traps',
-    pool: SpellDefinition[],
-    selected: readonly string[],
-    limit: number,
-    onToggle: (id: string) => void,
-  ) => {
-    const full = selected.length >= limit;
+  const renderCardTile = (definition: SpellDefinition) => {
+    const trap = definition.isTrap === true;
+    const selected = trap ? roster.trapIds : roster.spellIds;
+    const isSelected = selected.includes(definition.id);
+    // Cards compete with pieces for the same points now.
+    const locked = !isSelected && !canAffordCard(roster, definition.id);
+    const price = definition.cost ?? 0;
+    const toggle = trap ? toggleTrapCard : toggleSpellCard;
+    return (
+      <button
+        key={definition.id}
+        type="button"
+        className={[
+          'deckcard',
+          definition.artwork ? 'deckcard--art' : '',
+          isSelected ? 'deckcard--selected' : '',
+          locked ? 'deckcard--locked' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        aria-pressed={isSelected}
+        aria-label={`${isSelected ? 'Remove' : 'Select'} ${definition.name} (${price} points)`}
+        title={`${definition.name} (${price} pts) — ${definition.description}`}
+        onClick={() => onChange(toggle(roster, definition.id))}
+      >
+        {definition.artwork ? (
+          // The card face is the whole identity: name, type banner and
+          // rules text are painted into the artwork itself.
+          <img
+            className="deckcard__artimg"
+            src={definition.artwork}
+            alt={definition.name}
+            loading="lazy"
+            draggable={false}
+          />
+        ) : (
+          <>
+            <span className="deckcard__icon" aria-hidden="true">
+              {definition.icon}
+            </span>
+            <span className="deckcard__name">{definition.name}</span>
+            <span className="deckcard__text">{definition.description}</span>
+          </>
+        )}
+        <span className="deckcard__cost">{price} {price === 1 ? 'pt' : 'pts'}</span>
+        {isSelected && <span className="deckcard__check">✓</span>}
+      </button>
+    );
+  };
+
+  /** One CARDS tab: spells and traps are a single priced category, one grid,
+      grouped by kind the way the piece catalog groups by class. */
+  const renderCards = () => {
+    const selectedCount = roster.spellIds.length + roster.trapIds.length;
     return (
       <section className="panel deck">
         <h2 className="panel__title">
-          {kind === 'spells' ? 'Spells' : 'Traps'} — {selected.length} / {limit} selected
-          {full && <span className="deck__full"> · loadout full</span>}
+          Cards — {selectedCount} selected · {cardCost(roster)} pts
+          <span className="deck__full"> · {remaining} left in budget</span>
         </h2>
         <div className="deck__grid">
-          {pool.map((definition) => {
-            const isSelected = selected.includes(definition.id);
-            const locked = !isSelected && full;
-            return (
-              <button
-                key={definition.id}
-                type="button"
-                className={[
-                  'deckcard',
-                  definition.artwork ? 'deckcard--art' : '',
-                  isSelected ? 'deckcard--selected' : '',
-                  locked ? 'deckcard--locked' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                aria-pressed={isSelected}
-                aria-label={`${isSelected ? 'Remove' : 'Select'} ${definition.name}`}
-                title={`${definition.name} — ${definition.description}`}
-                onClick={() => onToggle(definition.id)}
-              >
-                {definition.artwork ? (
-                  // The card face is the whole identity: name, type banner and
-                  // rules text are painted into the artwork itself.
-                  <img
-                    className="deckcard__artimg"
-                    src={definition.artwork}
-                    alt={definition.name}
-                    loading="lazy"
-                    draggable={false}
-                  />
-                ) : (
-                  <>
-                    <span className="deckcard__icon" aria-hidden="true">
-                      {definition.icon}
-                    </span>
-                    <span className="deckcard__name">{definition.name}</span>
-                    <span className="deckcard__text">{definition.description}</span>
-                  </>
-                )}
-                {isSelected && <span className="deckcard__check">✓</span>}
-              </button>
-            );
-          })}
+          <div className="deck__heading">Spells</div>
+          {spellPool.map(renderCardTile)}
+          <div className="deck__heading">Traps</div>
+          {trapPool.map(renderCardTile)}
         </div>
-        {full && (
+        {remaining === 0 && (
           <p className="deck__hint">
-            Your {kind === 'spells' ? 'Spell' : 'Trap'} loadout is full — remove a card to swap it.
+            Budget spent — remove a card or a piece to make room.
           </p>
         )}
       </section>
@@ -209,9 +216,8 @@ export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirr
       <nav className="builder-tabs" aria-label="Army sections">
         {(
           [
-            { id: 'pieces', label: 'Pieces' },
-            { id: 'spells', label: `Spells ${roster.spellIds.length}/${SPELL_LOADOUT_SIZE}` },
-            { id: 'traps', label: `Traps ${roster.trapIds.length}/${TRAP_LOADOUT_SIZE}` },
+            { id: 'pieces', label: `Pieces ${unitCost(roster)} pts` },
+            { id: 'cards', label: `Cards ${cardCost(roster)} pts` },
             { id: 'operator', label: 'Operator' },
           ] as { id: BuilderTab; label: string }[]
         ).map(({ id, label }) => (
@@ -292,27 +298,21 @@ export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirr
         </div>
       )}
 
-      {tab === 'spells' &&
-        renderDeck('spells', spellPool, roster.spellIds, SPELL_LOADOUT_SIZE, (id) =>
-          onChange(toggleSpellCard(roster, id)),
-        )}
+      {tab === 'cards' && renderCards()}
 
-      {tab === 'traps' &&
-        renderDeck('traps', trapPool, roster.trapIds, TRAP_LOADOUT_SIZE, (id) =>
-          onChange(toggleTrapCard(roster, id)),
-        )}
-
-      {/* Persistent loadout summary + confirm, visible on every tab. */}
+      {/* Persistent budget summary + confirm, visible on every tab. One pool:
+          pieces and cards spend the same points. */}
       <footer className="panel builder__summary">
         <div className="builder__summary-grid">
           <span>
-            <strong>Pieces</strong> {roster.units.length - 1} + King · {spent} / {roster.budget} pts
+            <strong>Total</strong> {spent} / {roster.budget} pts
           </span>
-          <span className={roster.spellIds.length === SPELL_LOADOUT_SIZE ? 'builder__ok' : ''}>
-            <strong>Spells</strong> {roster.spellIds.length} / {SPELL_LOADOUT_SIZE}
+          <span>
+            <strong>Pieces</strong> {roster.units.length - 1} + King · {unitCost(roster)} pts
           </span>
-          <span className={roster.trapIds.length === TRAP_LOADOUT_SIZE ? 'builder__ok' : ''}>
-            <strong>Traps</strong> {roster.trapIds.length} / {TRAP_LOADOUT_SIZE}
+          <span>
+            <strong>Cards</strong> {roster.spellIds.length} spells + {roster.trapIds.length} traps ·{' '}
+            {cardCost(roster)} pts
           </span>
         </div>
         {feedback && <p className="builder__error">{feedback}</p>}

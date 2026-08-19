@@ -1,8 +1,11 @@
 import { GameScreen } from './ui/screens/GameScreen';
 import { MainMenu } from './ui/screens/MainMenu';
+import { MatchHistory } from './ui/screens/MatchHistory';
+import { OnlineScreen } from './ui/screens/OnlineScreen';
 import { PlacementScreen } from './ui/screens/PlacementScreen';
 import { TeamBuilder } from './ui/screens/TeamBuilder';
 import { useAppFlow } from './ui/useAppFlow';
+import { useAccount } from './cloud/useAccount';
 
 /**
  * Screen router. All flow logic lives in `useAppFlow`; all game logic lives in
@@ -10,11 +13,24 @@ import { useAppFlow } from './ui/useAppFlow';
  */
 export default function App() {
   const flow = useAppFlow();
+  const account = useAccount();
   const { screen, draft } = flow;
+
+  const menu = (
+    <MainMenu
+      onClassic={flow.startClassic}
+      onDraft={flow.startDraft}
+      onOnline={flow.toOnline}
+      timeControl={flow.timeControl}
+      onTimeControl={flow.setTimeControl}
+      account={account}
+      onShowHistory={flow.toHistory}
+    />
+  );
 
   switch (screen.kind) {
     case 'menu':
-      return <MainMenu onClassic={flow.startClassic} onDraft={flow.startDraft} />;
+      return menu;
 
     case 'build':
       return (
@@ -42,6 +58,27 @@ export default function App() {
       );
 
     case 'game':
-      return <GameScreen mode={screen.mode} draft={draft} onExit={flow.toMenu} />;
+      return (
+        <GameScreen
+          mode={screen.mode}
+          draft={draft}
+          timeControl={flow.timeControl}
+          user={account.user}
+          onExit={flow.toMenu}
+        />
+      );
+
+    case 'history':
+      // Signing out while on the history screen falls back to the menu.
+      return account.user ? <MatchHistory user={account.user} onBack={flow.toMenu} /> : menu;
+
+    case 'online':
+      // Online play requires a signed-in account; signing out mid-screen
+      // falls back to the menu rather than stranding a headless lobby.
+      return account.user ? (
+        <OnlineScreen user={account.user} timeControl={flow.timeControl} onExit={flow.toMenu} />
+      ) : (
+        menu
+      );
   }
 }

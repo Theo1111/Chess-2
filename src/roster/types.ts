@@ -20,9 +20,12 @@ export interface Roster {
   readonly units: readonly RosterUnit[];
   /** Unit id → starting square. Empty until the placement step. */
   readonly placement: Readonly<Record<string, Square>>;
-  /** The army's Spell Card deck — exactly five for a standard match. */
+  /**
+   * The army's Spell Card deck. Cards are priced content: they share the
+   * point budget with pieces, one copy of each card at most, any allotment.
+   */
   readonly spellIds: readonly string[];
-  /** The army's Trap Card deck — exactly five, fully separate from spells. */
+  /** The army's Trap Card deck — same shared budget, separate deck. */
   readonly trapIds: readonly string[];
 }
 
@@ -39,8 +42,6 @@ export type RosterErrorCode =
   | 'square-outside-zone'
   | 'square-occupied'
   | 'placement-collision'
-  | 'spells-incomplete'
-  | 'traps-incomplete'
   | 'invalid-card'
   | 'duplicate-card';
 

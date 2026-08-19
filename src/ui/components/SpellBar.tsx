@@ -104,14 +104,25 @@ export function SpellBar({ game, casting, onSelect, onCancel }: SpellBarProps) {
 
   return (
     <>
-      {spells.length > 0 && (
+      {owned.length > 0 && (
         <section className="panel spellbar">
-          <h2 className="panel__title">Spells — {moverName}</h2>
-          <div className="spellbar__cards">{spells.map(renderCard)}</div>
+          {/* Spells and traps are one category — one panel, two labelled
+              rows, matching how the builder prices and groups them. */}
+          <h2 className="panel__title">Cards — {moverName}</h2>
+          {spells.length > 0 && (
+            <>
+              <p className="spellbar__group">Spells</p>
+              <div className="spellbar__cards">{spells.map(renderCard)}</div>
+            </>
+          )}
+          {traps.length > 0 && (
+            <>
+              <p className="spellbar__group">Traps</p>
+              <div className="spellbar__cards">{traps.map(renderCard)}</div>
+            </>
+          )}
 
-          {inspected &&
-            getSpellDefinition(inspected).isTrap !== true &&
-            getSpellDefinition(inspected).artwork && (
+          {inspected && getSpellDefinition(inspected).artwork && (
             <div className="spellbar__preview" aria-hidden="true">
               <img
                 src={getSpellDefinition(inspected).artwork}
@@ -156,25 +167,6 @@ export function SpellBar({ game, casting, onSelect, onCancel }: SpellBarProps) {
               </span>
             </div>
           )}
-        </section>
-      )}
-
-      {traps.length > 0 && (
-        <section className="panel spellbar spellbar--traps">
-          <h2 className="panel__title">Traps — {moverName}</h2>
-          <div className="spellbar__cards">{traps.map(renderCard)}</div>
-          {inspected &&
-            getSpellDefinition(inspected).isTrap === true &&
-            getSpellDefinition(inspected).artwork && (
-              <div className="spellbar__preview" aria-hidden="true">
-                <img
-                  src={getSpellDefinition(inspected).artwork}
-                  alt=""
-                  loading="lazy"
-                  draggable={false}
-                />
-              </div>
-            )}
         </section>
       )}
     </>

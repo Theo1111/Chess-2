@@ -17,6 +17,13 @@
   --board-dark: #6f8f5a;
   --board-edge: #2a2f28;
 
+  /* Deck-tile size: fluid with the viewport, bounded so cards never turn
+     into stamps on a laptop or posters on a 4K display. The height is
+     derived with calc rather than `aspect-ratio` because the deck grid needs
+     row heights it can resolve up front — see .deck__grid. */
+  --deckcard-w: clamp(140px, 13vw, 250px);
+  --deckcard-h: calc(var(--deckcard-w) * 1.5);
+
   --piece-light: #fbfaf5;
   --piece-dark: #22262c;
   --piece-outline: #14171b;
@@ -263,16 +270,36 @@ button {
   width: 100%;
   height: 100%;
   fill: var(--piece-light);
-  stroke: var(--piece-outline);
-  stroke-width: 1.1;
   stroke-linejoin: round;
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
+  stroke-linecap: round;
+  /* Tight contact shadow for edge definition + soft ambient for lift. */
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55)) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.3));
   pointer-events: none;
 }
 
-.piece--black {
-  fill: var(--piece-dark);
-  stroke: #05070a;
+/* Outline pass: a bold rim drawn UNDER the body. Half its width shows
+   beyond the silhouette, so the visible rim is ~1.4 units — crisp against
+   the painted board without cartoonish thickness. */
+.piece .piece__outline {
+  fill: var(--piece-outline);
+  stroke: var(--piece-outline);
+  stroke-width: 2.8;
+}
+
+/* Body pass: gradient from the SVG defs; a faint same-tone stroke keeps
+   sub-pixel path seams from showing at small sizes. */
+.piece .piece__body {
+  stroke: rgba(0, 0, 0, 0.18);
+  stroke-width: 0.5;
+}
+
+.piece--black .piece__outline {
+  fill: #06080b;
+  stroke: #06080b;
+}
+
+.piece--black .piece__body {
+  stroke: rgba(255, 255, 255, 0.12);
 }
 
 .piece--captured {
@@ -282,14 +309,28 @@ button {
   opacity: 0.95;
 }
 
-/* Dark pieces need lifting when shown against the dark panel background. */
-.captured .piece--black {
+/* At 20px the bold rim overwhelms the sculpt — thin it right down. */
+.piece--captured .piece__outline {
+  stroke-width: 1.2;
+}
+
+/* Dark pieces need lifting when shown against the dark panel background.
+   The flat fills override the body gradients (CSS beats the fill attribute). */
+.captured .piece--black .piece__body {
   fill: #6c7686;
+}
+
+.captured .piece--black .piece__outline {
+  fill: #39414e;
   stroke: #39414e;
 }
 
-.captured .piece--white {
+.captured .piece--white .piece__body {
   fill: #dfe4ec;
+}
+
+.captured .piece--white .piece__outline {
+  fill: #39414e;
   stroke: #39414e;
 }
 
@@ -654,6 +695,340 @@ button {
   gap: 14px;
   width: min(440px, 90vw);
 }
+
+/* -------------------------------------------------------------- account */
+
+/* Account control pinned to the top-right corner of the screen. */
+.account-corner {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 60;
+}
+
+.account-corner__chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px 7px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-glass-strong);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  box-shadow: var(--panel-shadow);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+
+.account-corner__chip:hover {
+  border-color: var(--accent);
+}
+
+.account-corner__chip--in .account-corner__avatar {
+  background: var(--accent);
+  color: #0b1017;
+}
+
+.account-corner__avatar {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.account-corner__label {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-corner__popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(320px, calc(100vw - 32px));
+}
+
+.account-corner__popover .account {
+  box-shadow: var(--panel-shadow);
+}
+
+/* --------------------------------------------------------------- online */
+
+.online-lobby__panel {
+  max-width: 440px;
+  margin: 48px auto 0;
+  padding: 22px;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  text-align: center;
+}
+
+.online-lobby__status {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.online-lobby__hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.online-lobby__pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: online-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes online-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* Green edge while it is this player's move. */
+.status--your-turn {
+  border: 1px solid #46a758;
+  box-shadow: 0 0 0 1px rgba(70, 167, 88, 0.35);
+}
+
+.account {
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.account__form {
+  display: grid;
+  gap: 8px;
+}
+
+.account__input {
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(10, 13, 18, 0.6);
+  color: var(--text);
+  font: inherit;
+}
+
+.account__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.account__who {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.account__email {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.account__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.account__message {
+  margin: 0;
+  font-size: 12px;
+  color: #f0b429;
+}
+
+.account__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.account__switch {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+/* -------------------------------------------------------- match history */
+
+.history-list {
+  padding: 6px 0;
+}
+
+.history-list__empty {
+  margin: 0;
+  padding: 16px;
+  color: var(--text-muted);
+}
+
+.history-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history-list__item {
+  padding: 12px 16px;
+  display: grid;
+  gap: 5px;
+}
+
+.history-list__item + .history-list__item {
+  border-top: 1px solid var(--border);
+}
+
+.history-list__headline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.history-list__reason {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.history-list__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.history-list__moves {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------- time control */
+
+.menu__timing {
+  margin-top: 22px;
+  width: min(440px, 90vw);
+  text-align: center;
+}
+
+.menu__timing-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.menu__timing-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.timechip {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(12, 15, 20, 0.72);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.timechip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.timechip--active {
+  border-color: var(--accent);
+  background: rgba(110, 168, 254, 0.16);
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------- clock */
+
+.clock {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.clock__face {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: rgba(10, 13, 18, 0.55);
+}
+
+/* The side whose clock is actually ticking. */
+.clock__face--active {
+  border-color: var(--accent);
+  background: rgba(110, 168, 254, 0.12);
+}
+
+.clock__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.clock__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.clock__face--low .clock__time {
+  color: #f0b429;
+}
+
+.clock__face--out .clock__time {
+  color: #e5484d;
+}
+
+.clock__face--active.clock__face--low {
+  border-color: #f0b429;
+  background: rgba(240, 180, 41, 0.12);
+}
+
 
 .menu__option {
   display: grid;
@@ -1310,19 +1685,38 @@ button {
 
 .deck__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  /* Rows keep their own height. Without this the scroll container's spare
-     space is handed to the rows, which stretches the art-less tiles into
-     columns the height of the panel. */
+  /* Columns are exactly one card wide and cards have a resolved height, so
+     row heights are exact and nothing can overlap regardless of when the
+     lazy card art loads. The card size itself is fluid (see --deckcard-w),
+     so wider screens get bigger cards, not just more of them. */
+  grid-template-columns: repeat(auto-fill, var(--deckcard-w));
+  justify-content: center;
   align-content: start;
   gap: clamp(10px, 1vw, 18px);
   padding: 14px;
 }
 
-/* Tiles without artwork take the printed cards' 2:3 rather than filling
-   whatever row they land in. */
+/* Spells and Traps are one priced category in one grid; these headings
+   separate the kinds, spanning the full row like the catalog's class rows. */
+.deck__heading {
+  grid-column: 1 / -1;
+  padding: 10px 2px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+}
+
+.deck__heading:first-child {
+  padding-top: 0;
+}
+
+/* Every tile is a 2:3 card, art or not — see `.deckcard`'s aspect-ratio.
+   Text tiles additionally keep their content at the top and clip anything
+   that would run past the card. */
 .deckcard:not(.deckcard--art) {
-  aspect-ratio: 2 / 3;
   align-content: start;
   overflow: hidden;
 }
@@ -1330,6 +1724,12 @@ button {
 .deckcard {
   position: relative;
   display: grid;
+  /* Sized from the --deckcard tokens rather than `aspect-ratio`: a grid
+     item's ratio does not feed auto row sizing (rows measured the lazy card
+     art at zero, so every row overflowed into the next). These are lengths
+     the grid can resolve before layout, and they scale with the viewport. */
+  width: var(--deckcard-w);
+  height: var(--deckcard-h);
   justify-items: start;
   gap: 6px;
   text-align: left;
@@ -1354,6 +1754,24 @@ button {
 
 .deckcard--locked {
   opacity: 0.45;
+}
+
+/* Price chip: cards spend the same budget as pieces, so every tile says
+   what it costs — including over painted card faces, which predate prices. */
+.deckcard__cost {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 160, 77, 0.65);
+  background: rgba(9, 12, 10, 0.85);
+  color: #e8d6aa;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  pointer-events: none;
 }
 
 .deckcard__icon {
@@ -1395,7 +1813,6 @@ button {
 .deckcard--art {
   padding: 0;
   overflow: hidden;
-  aspect-ratio: 2 / 3;
   background: #14101f;
 }
 
@@ -1463,6 +1880,21 @@ button {
   flex-wrap: wrap;
   gap: 8px;
   padding: 12px 14px 6px;
+}
+
+/* Kind label inside the one Cards panel. */
+.spellbar__group {
+  margin: 0;
+  padding: 10px 14px 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.spellbar__group + .spellbar__cards {
+  padding-top: 6px;
 }
 
 /* Full card-face preview floating beside the sidebar while hovering. */

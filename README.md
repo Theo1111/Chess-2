@@ -57,17 +57,33 @@ round, blocking slides like an occupied square). Shared subsystems carry them:
 board regions, per-square statuses, the trap lifecycle (hidden → revealed → spent),
 and traveled-path detection derived from the movement engine.
 
-**Batch 7** makes cards part of army-building: every army chooses exactly **5 Spell
-Cards and 5 Trap Cards** (two fully separate decks) in new Builder tabs
-(PIECES | SPELLS | TRAPS | OPERATOR-soon), saved with the roster and carried into the
-match — during play each side only has the cards it brought. A fifth trap, **Mine**
-(destroys the enemy piece that lands on it — destruction, not capture; kings survive;
-king-safety fizzle like Tripwire), completes the trap pool. Armies are invalid for a
-standard match until both decks are full, older armies without decks load safely as
-incomplete, and the match UI shows Spells and Traps as separate panels.
+**Batch 7** makes cards part of army-building: each army picks its Spell and Trap
+decks in new Builder tabs (PIECES | CARDS | OPERATOR-soon), saved with the
+roster and carried into the match — during play each side only has the cards it
+brought. A fifth trap, **Mine** (destroys the enemy piece that lands on it —
+destruction, not capture; kings survive; king-safety fizzle like Tripwire),
+completes the trap pool. Spells and traps are one category throughout the UI: a
+single CARDS tab in the builder and a single Cards panel in the match, each with
+labelled Spells / Traps rows (the engine still distinguishes traps mechanically —
+hidden placement, no Null Field suppression).
+(Originally exactly 5+5 free cards; superseded by shared-budget pricing below.)
+
+**Shared-budget cards**: spells and traps are priced content drawn from the SAME
+point pool as pieces — any allotment, one copy of each card at most, no minimums.
+Costs live on the engine card definitions (`SpellDefinition.cost`) and were set
+from the 25,000-game GreedyBot baseline (`balance-results/baseline-v1`): each
+spell's price tracks its adjusted marginal win contribution (Shield/Last Stand
++2.6pp → 4 pts; Royal Order/Sacrifice → 3; near-neutral cards → 2; Freeze,
+Teleport, Null Field, Recon → 1). Trap coefficients were unidentifiable in that
+baseline (the fixed 5+5 loadout gave trap selection zero variance), so traps are
+priced from behavioral telemetry: Mine and Web Trap (2 pts) fire most with
+material/tempo impact; Tripwire, Sonar and Dead Zone (1 pt) rarely fire or only
+gather information. Smoke Screen and Recon prices carry the limited-fidelity
+caveat and are first in line for re-pricing. The budget rose **42 → 55** so the
+classic 5+5-style loadout (~11–20 pts of cards) still leaves a traditional army.
 
 **Batch 8** grows the arena: the board is now **9×9** (files a–i, ranks 1–9) and the
-roster budget is **42 points**. Deployment zones are each side's first two ranks (1–2
+roster budget is **55 points** (originally 42; raised when cards joined the pool). Deployment zones are each side's first two ranks (1–2
 and 8–9), pawns start on ranks 2/8 and promote on 9/1, castling uses the a/i-file
 rooks around the centred king on the e-file, and classic mode fields a symmetric
 twin-queen lineup (RNBQKQBNR + nine pawns). The perft suite now holds self-generated
@@ -181,6 +197,19 @@ Then open the URL Vite prints (default <http://localhost:5173>).
 - Promotion opens a picker (queen / rook / bishop / knight).
 - The sidebar shows whose turn it is, the game result when it ends, captured material,
   and the full move history in algebraic notation.
+- **Time control** is chosen on the menu — Unlimited, 5, 10, 15, 30 minutes or 1 hour —
+  and applies to both modes. Timed games show both clocks in the sidebar; the side to
+  move is highlighted, the last 30 seconds turn amber, and running out ends the match
+  ("Black wins — White ran out of time") and locks the board. White's clock starts when
+  the match does, as in standard chess. Untimed games render no clock at all.
+
+  The clock deliberately lives **outside the engine** (`ui/timeControls.ts` +
+  `ui/useGameClock.ts`): `GameState` stays a pure function of the moves played, which is
+  what lets the balance laboratory replay hundreds of thousands of games with no wall
+  clock in sight. `useChessGame` takes an `isLocked()` getter so match-level endings the
+  engine knows nothing about can freeze input. Time is measured from `Date.now()` deltas
+  rather than counted ticks, so a throttled background tab still deducts real elapsed
+  time instead of quietly gifting it.
 
 ## Architecture
 
@@ -449,6 +478,41 @@ worker scaling measured by `balance:benchmark` (≈3× at 8 workers on short
 runs, better amortized on long ones). Deliberately not built yet:
 evolutionary army search (the `optimizedArmyInclusionRate` field is already
 in the data model, null until then), Glicko-2, ISMCTS.
+
+## Accounts & cloud sync (Supabase)
+
+Optional, local-first: the game, the engine and the balance laboratory run fully
+without a network or an account. With a Supabase project configured, players can
+create accounts (email + password), and every finished game is saved to their
+match history — mode, time control, result and reason (including "on time"),
+the SAN move list plus starting FEN (enough for the engine to replay the game),
+the final position, and for custom matches both full army rosters and the
+content fingerprint of the rules the game was played under.
+
+Setup:
+
+1. Create a project at [supabase.com](https://supabase.com) (free tier is fine).
+2. Run [`supabase/schema.sql`](supabase/schema.sql) in the dashboard's SQL
+   editor. It creates `profiles`, `saved_armies` and `matches`, all row-level
+   secured so an account can only ever touch its own rows, plus a trigger that
+   gives every new user a profile.
+3. Create `.env.local` at the repo root (gitignored):
+
+   ```text
+   VITE_SUPABASE_URL=https://<project>.supabase.co
+   VITE_SUPABASE_ANON_KEY=<publishable anon key>
+   ```
+
+4. Restart the dev server. The menu's Account panel switches from a setup hint
+   to sign-in / create-account.
+
+Architecture (`src/cloud/`): `supabaseClient.ts` reads the env and degrades to
+null when unconfigured — every caller handles that, which is what keeps the app
+fully playable offline; `records.ts` holds the pure GameState→row builders
+(unit-tested, no network); `auth.ts`/`storage.ts` return `{ error }` results
+instead of throwing; `useAccount.ts` exposes the session to React. Nothing in
+`src/engine` or `src/balance` imports any of it. Match saves are fire-and-forget
+on game end — a failed sync logs a warning and never touches gameplay.
 
 ## Known limitations
 

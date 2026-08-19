@@ -4,7 +4,7 @@
  */
 
 import { RANK_COUNT, makeSquare, rankOf, type Color, type PieceType, type Square } from '../engine';
-import { MANDATORY_PIECE, costOf } from './catalog';
+import { MANDATORY_PIECE, costOf, costOfCard } from './catalog';
 import type { Roster, RosterUnit } from './types';
 
 /** The two ranks a colour may deploy onto. */
@@ -70,8 +70,16 @@ export function removeLastUnitOfType(roster: Roster, type: PieceType): Roster {
 
 export const isMandatory = (unit: RosterUnit): boolean => unit.type === MANDATORY_PIECE;
 
-export const rosterCost = (roster: Roster): number =>
+/** Points spent on pieces alone. */
+export const unitCost = (roster: Roster): number =>
   roster.units.reduce((total, unit) => total + costOf(unit.type), 0);
+
+/** Points spent on the card decks alone. */
+export const cardCost = (roster: Roster): number =>
+  [...roster.spellIds, ...roster.trapIds].reduce((total, id) => total + costOfCard(id), 0);
+
+/** Total points spent: pieces AND cards share the one budget. */
+export const rosterCost = (roster: Roster): number => unitCost(roster) + cardCost(roster);
 
 export const remainingBudget = (roster: Roster): number => roster.budget - rosterCost(roster);
 
@@ -79,6 +87,10 @@ export const remainingBudget = (roster: Roster): number => roster.budget - roste
 export const canAfford = (roster: Roster, type: PieceType): boolean =>
   costOf(type) <= remainingBudget(roster) &&
   roster.units.length < startingSquares(roster.color).length;
+
+/** True if the card fits the remaining budget (or is already selected). */
+export const canAffordCard = (roster: Roster, id: string): boolean =>
+  costOfCard(id) <= remainingBudget(roster);
 
 /** Units still waiting for a square, in purchase order. */
 export const unplacedUnits = (roster: Roster): RosterUnit[] =>

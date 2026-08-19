@@ -14,12 +14,11 @@
 
 import type { PieceClass, PieceType } from '../engine';
 import {
-  SPELL_LOADOUT_SIZE,
-  TRAP_LOADOUT_SIZE,
   addUnit,
   availableSpellCards,
   availableTrapCards,
   canAfford,
+  canAffordCard,
   createRoster,
   describeErrors,
   draftablePieces,
@@ -46,14 +45,25 @@ export interface ArmyOptions {
   readonly mode?: ArmyMode;
 }
 
-/** Random 5+5 card decks from whatever the registry currently offers. */
-function randomLoadout(roster: Roster, rng: SeededRng): Roster {
+/**
+ * Random card purchases under the SHARED budget: walk a shuffled card pool
+ * and buy what fits, spending at most `maxPoints`. Card spending varies army
+ * to army — exactly the selection variance the balance model needs to price
+ * cards (the fixed 5+5 era left card coefficients unidentifiable).
+ */
+function buyCards(roster: Roster, rng: SeededRng, maxPoints: number): Roster {
   let next = roster;
-  for (const card of rng.shuffle(availableSpellCards()).slice(0, SPELL_LOADOUT_SIZE)) {
-    next = toggleSpellCard(next, card.id);
-  }
-  for (const card of rng.shuffle(availableTrapCards()).slice(0, TRAP_LOADOUT_SIZE)) {
-    next = toggleTrapCard(next, card.id);
+  let spent = 0;
+  const pool = rng.shuffle([...availableSpellCards(), ...availableTrapCards()]);
+  for (const card of pool) {
+    const price = card.cost ?? 0;
+    if (spent + price > maxPoints) continue;
+    if (!canAffordCard(next, card.id)) continue;
+    const bought = card.isTrap ? toggleTrapCard(next, card.id) : toggleSpellCard(next, card.id);
+    if (bought !== next) {
+      next = bought;
+      spent += price;
+    }
   }
   return next;
 }
@@ -95,6 +105,12 @@ export function generateArmy(rng: SeededRng, options: ArmyOptions = {}): Roster 
   const mode = options.mode ?? { kind: 'random' };
   let roster = createRoster('white', budget);
 
+  // Cards buy FIRST against a randomly sized reservation (0 to half the
+  // budget) — piece-buying spends every remaining point, so buying cards
+  // second would starve them to scraps. The spread from card-less to
+  // card-heavy armies is deliberate.
+  roster = buyCards(roster, rng, rng.int(Math.floor(budget / 2) + 1));
+
   switch (mode.kind) {
     case 'random':
       roster = buyUnits(roster, rng, () => false, 0);
@@ -115,7 +131,9 @@ export function generateArmy(rng: SeededRng, options: ArmyOptions = {}): Roster 
       break;
   }
 
-  roster = randomLoadout(randomPlacement(roster, rng), rng);
+  // Soak leftovers: a capacity-capped army may still afford more cards.
+  roster = buyCards(roster, rng, roster.budget);
+  roster = randomPlacement(roster, rng);
   assertValid(roster);
   return roster;
 }
@@ -133,7 +151,7 @@ export function mutateArmy(roster: Roster, rng: SeededRng): Roster {
   }
   next = buyUnits(next, rng, () => false, 0);
 
-  // Occasionally trade one spell for one outside the deck.
+  // Occasionally trade one spell for one outside the deck (budget allowing).
   if (rng.next() < 0.3) {
     const outside = availableSpellCards().filter((card) => !next.spellIds.includes(card.id));
     if (outside.length > 0 && next.spellIds.length > 0) {
@@ -141,6 +159,8 @@ export function mutateArmy(roster: Roster, rng: SeededRng): Roster {
       next = toggleSpellCard(next, rng.pick(outside).id);
     }
   }
+  // Refill any freed points with cards, then pieces already happened above.
+  next = buyCards(next, rng, next.budget);
 
   next = randomPlacement(next, rng);
   assertValid(next);
