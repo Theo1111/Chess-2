@@ -28,6 +28,27 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 const configured = Boolean(url && anonKey);
 
+/**
+ * Session slot — how two accounts stay signed in at once.
+ *
+ * Supabase keeps its session in localStorage, which is shared by every tab of
+ * the same browser profile, so a second tab is the SAME user by design.
+ * `?account=<slot>` gives that tab its own storage key and therefore its own
+ * independent session: open the game normally in one tab and `?account=2` in
+ * another to play yourself online, without incognito windows or a second
+ * browser.
+ *
+ * Default (no param) keeps Supabase's own key, so existing sign-ins survive
+ * this change and normal players are unaffected.
+ */
+function readSessionSlot(): string {
+  if (typeof window === 'undefined') return '';
+  const slot = new URLSearchParams(window.location.search).get('account') ?? '';
+  return slot.trim().slice(0, 24).replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+export const sessionSlot: string = readSessionSlot();
+
 let clientPromise: Promise<SupabaseClient> | null = null;
 
 /** True when a Supabase project is configured for this build. */
@@ -44,6 +65,9 @@ export async function getSupabase(): Promise<SupabaseClient | null> {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+        // Only override when a slot is requested; otherwise Supabase's
+        // default key keeps existing sessions valid.
+        ...(sessionSlot ? { storageKey: `sb-chess2-account-${sessionSlot}` } : {}),
       },
     }),
   );

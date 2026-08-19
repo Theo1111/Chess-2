@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AccountUser } from '../../cloud/auth';
+import { sessionSlot } from '../../cloud/supabaseClient';
 import { AccountPanel } from './AccountPanel';
 
 interface AccountCornerProps {
@@ -50,6 +51,9 @@ export function AccountCorner({ user, cloudConfigured, onShowHistory }: AccountC
           {user ? user.displayName.charAt(0).toUpperCase() : '👤'}
         </span>
         <span className="account-corner__label">{label}</span>
+        {/* Which independent session this tab is using (?account=…), so two
+            test tabs are never confused for one another. */}
+        {sessionSlot && <span className="account-corner__slot">#{sessionSlot}</span>}
       </button>
 
       {open && (
