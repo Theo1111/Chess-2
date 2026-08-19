@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Color } from '../engine';
 import type { GameAction } from '../ai/actions';
+import type { Roster } from '../roster';
 import {
+  expireOnlineDraft,
   fetchOnlineGame,
   finishOnlineGame,
   submitOnlineAction,
+  submitOnlineArmy,
   subscribeToOnlineGame,
   type OnlineGameRow,
 } from './online';
-import { replayOnlineActions, nextTurnAfter, replayOutcome } from './onlineReplay';
+import {
+  createOnlineInitialState,
+  replayOnlineActions,
+  nextTurnAfter,
+  replayOutcome,
+} from './onlineReplay';
 import type { AccountUser } from './auth';
 
 /**
@@ -32,6 +40,10 @@ export interface OnlineGame {
   readonly error: string | null;
   readonly submit: (action: GameAction) => Promise<void>;
   readonly resign: () => Promise<void>;
+  /** Drafting phase: seconds left, and whether this player has submitted. */
+  readonly draftSecondsLeft: number | null;
+  readonly armySubmitted: boolean;
+  readonly submitArmy: (roster: Roster) => Promise<string | null>;
 }
 
 export function useOnlineGame(gameId: string, user: AccountUser | null): OnlineGame {
@@ -66,7 +78,18 @@ export function useOnlineGame(gameId: string, user: AccountUser | null): OnlineG
     };
   }, [gameId, refresh, acceptRow]);
 
-  const replay = useMemo(() => (row ? replayOnlineActions(row.actions) : null), [row]);
+  // Custom games only have a position once both armies are in; until then
+  // there is nothing to replay.
+  const initialState = useMemo(
+    () =>
+      row ? createOnlineInitialState(row.mode, row.white_army, row.black_army) : null,
+    [row],
+  );
+
+  const replay = useMemo(
+    () => (row && initialState ? replayOnlineActions(row.actions, initialState) : null),
+    [row, initialState],
+  );
 
   const myColor: Color | null = useMemo(() => {
     if (!row || !user) return null;
@@ -116,6 +139,47 @@ export function useOnlineGame(gameId: string, user: AccountUser | null): OnlineG
     [row, replay, canAct, refresh, acceptRow],
   );
 
+  // --- drafting phase -----------------------------------------------------
+  // The countdown is display only: the authoritative deadline lives in the
+  // row and is re-checked by the server on every submit, so a paused tab or
+  // a tampered client clock buys nobody extra time.
+  const [now, setNow] = useState(() => Date.now());
+  const drafting = row?.status === 'drafting';
+
+  useEffect(() => {
+    if (!drafting) return;
+    const tick = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(tick);
+  }, [drafting]);
+
+  const draftSecondsLeft = useMemo(() => {
+    if (!drafting || !row?.draft_deadline) return null;
+    const left = new Date(row.draft_deadline).getTime() - now;
+    return Math.max(0, Math.ceil(left / 1000));
+  }, [drafting, row?.draft_deadline, now]);
+
+  // Once the deadline passes, ask the server to cancel. It only acts if the
+  // deadline has genuinely elapsed, so both clients may safely race here.
+  useEffect(() => {
+    if (!drafting || draftSecondsLeft === null || draftSecondsLeft > 0 || !row) return;
+    void expireOnlineDraft(row.id).then(() => void refresh());
+  }, [drafting, draftSecondsLeft, row, refresh]);
+
+  const armySubmitted = Boolean(
+    row && myColor && (myColor === 'white' ? row.white_army : row.black_army),
+  );
+
+  const submitArmy = useCallback(
+    async (roster: Roster): Promise<string | null> => {
+      if (!row) return null;
+      const result = await submitOnlineArmy(row.id, roster);
+      if (result.error) setError(result.error);
+      await refresh();
+      return result.status;
+    },
+    [row, refresh],
+  );
+
   const resign = useCallback(async () => {
     if (!row || myColor === null || row.status !== 'active') return;
     const winner: Color = myColor === 'white' ? 'black' : 'white';
@@ -124,5 +188,16 @@ export function useOnlineGame(gameId: string, user: AccountUser | null): OnlineG
     await refresh();
   }, [row, myColor, refresh]);
 
-  return { row, replay, myColor, canAct, error, submit, resign };
+  return {
+    row,
+    replay,
+    myColor,
+    canAct,
+    error,
+    submit,
+    resign,
+    draftSecondsLeft,
+    armySubmitted,
+    submitArmy,
+  };
 }

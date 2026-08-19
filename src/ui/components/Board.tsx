@@ -12,6 +12,7 @@ import {
   squareName,
   surroundingSquares,
   visibleTraps,
+  type Color,
   type Move,
   type Square,
 } from '../../engine';
@@ -37,10 +38,20 @@ export interface BoardController {
 
 interface BoardProps {
   controller: BoardController;
+  /**
+   * Whose side of the table to render from. Black flips both axes so a
+   * player's own pieces are always nearest — and swaps in the board artwork
+   * whose painted a–i / 1–9 labels are ordered for that view, since those
+   * coordinates live in the image, not the DOM.
+   */
+  orientation?: Color;
 }
 
-const RANKS = Array.from({ length: RANK_COUNT }, (_, index) => RANK_COUNT - 1 - index);
-const FILES = Array.from({ length: FILE_COUNT }, (_, index) => index);
+const RANKS_WHITE = Array.from({ length: RANK_COUNT }, (_, index) => RANK_COUNT - 1 - index);
+const FILES_WHITE = Array.from({ length: FILE_COUNT }, (_, index) => index);
+/** Black sees the board from the far side: both axes reverse. */
+const RANKS_BLACK = [...RANKS_WHITE].reverse();
+const FILES_BLACK = [...FILES_WHITE].reverse();
 
 /**
  * The board is a dumb renderer: it asks the controller what to highlight and
@@ -49,7 +60,7 @@ const FILES = Array.from({ length: FILE_COUNT }, (_, index) => index);
  * Both interaction styles route through the same controller calls:
  * click-to-select then click-to-move, or press-and-drag onto a target square.
  */
-export function Board({ controller }: BoardProps) {
+export function Board({ controller, orientation = 'white' }: BoardProps) {
   const { game, selected, movesBySquare, lastMove, checkSquare, selectSquare, tryMove, spellTargets } = controller;
 
   // An Ambusher's guard zone, shown while it is selected so players can see
@@ -162,10 +173,10 @@ export function Board({ controller }: BoardProps) {
   }, [tryMove]);
 
   return (
-    <div className="board-frame">
+    <div className={`board-frame${orientation === 'black' ? ' board-frame--black' : ''}`}>
       <div className="board" role="grid" aria-label="Chess board">
-        {RANKS.map((rank) =>
-          FILES.map((file) => {
+        {(orientation === 'black' ? RANKS_BLACK : RANKS_WHITE).map((rank) =>
+          (orientation === 'black' ? FILES_BLACK : FILES_WHITE).map((file) => {
             const square = makeSquare(file, rank);
             const piece = game.board[square];
             const moves = movesBySquare.get(square);

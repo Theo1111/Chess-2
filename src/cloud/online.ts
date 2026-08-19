@@ -8,6 +8,7 @@
  */
 
 import type { Color } from '../engine';
+import type { Roster } from '../roster';
 import type { GameAction } from '../ai/actions';
 import { CLOUD_SETUP_HINT, getSupabase } from './supabaseClient';
 
@@ -17,7 +18,13 @@ export interface OnlineGameRow {
   readonly black_id: string;
   readonly white_name: string;
   readonly black_name: string;
-  readonly status: 'active' | 'finished';
+  readonly status: 'drafting' | 'active' | 'finished' | 'cancelled';
+  readonly mode: 'classic' | 'custom';
+  /** Null until that player submits during the drafting phase. */
+  readonly white_army: Roster | null;
+  readonly black_army: Roster | null;
+  /** When the drafting phase expires (custom mode only). */
+  readonly draft_deadline: string | null;
   readonly turn: Color;
   readonly actions: readonly GameAction[];
   readonly winner: Color | 'draw' | null;
@@ -40,6 +47,7 @@ const NOT_CONFIGURED: Result = { error: CLOUD_SETUP_HINT };
 export async function findOnlineMatch(
   timeControl: string,
   displayName: string,
+  mode: 'classic' | 'custom' = 'classic',
 ): Promise<Result & { gameId: string | null }> {
   const supabase = await getSupabase();
   if (!supabase) return { ...NOT_CONFIGURED, gameId: null };
@@ -47,6 +55,7 @@ export async function findOnlineMatch(
   const { data, error } = await supabase.rpc('find_online_match', {
     p_time_control: timeControl,
     p_display_name: displayName,
+    p_mode: mode,
   });
   return { gameId: (data as string | null) ?? null, error: error?.message ?? null };
 }
@@ -148,4 +157,37 @@ export function subscribeToOnlineGame(
     cancelled = true;
     cleanup?.();
   };
+}
+
+/**
+ * Submit this player's army during the drafting phase. Returns the game's
+ * new status: 'active' once both armies are in, 'drafting' while waiting,
+ * or 'cancelled' if the server's deadline had already passed.
+ */
+export async function submitOnlineArmy(
+  gameId: string,
+  roster: Roster,
+): Promise<Result & { status: string | null }> {
+  const supabase = await getSupabase();
+  if (!supabase) return { ...NOT_CONFIGURED, status: null };
+
+  const { data, error } = await supabase.rpc('submit_online_army', {
+    p_game: gameId,
+    p_roster: roster,
+  });
+  return { status: (data as string | null) ?? null, error: error?.message ?? null };
+}
+
+/**
+ * Ask the server to cancel a draft whose deadline has passed. Safe to call
+ * speculatively: it only acts once now() is genuinely past the deadline.
+ */
+export async function expireOnlineDraft(
+  gameId: string,
+): Promise<Result & { status: string | null }> {
+  const supabase = await getSupabase();
+  if (!supabase) return { ...NOT_CONFIGURED, status: null };
+
+  const { data, error } = await supabase.rpc('expire_online_draft', { p_game: gameId });
+  return { status: (data as string | null) ?? null, error: error?.message ?? null };
 }

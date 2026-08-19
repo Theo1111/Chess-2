@@ -13,6 +13,7 @@
  */
 
 import { createInitialState, isGameOver, type GameState } from '../engine';
+import { createGameFromRosters, type Roster } from '../roster';
 import {
   actionKey,
   applyGameAction,
@@ -31,11 +32,33 @@ export interface ReplayResult {
   readonly applied: number;
 }
 
-/** Online v1 is classic chess: fixed start, spell books off. */
-export const createOnlineInitialState = (): GameState => createInitialState();
+/**
+ * The starting position for an online game. Classic mode is the fixed
+ * standard opening; custom mode is built from the two submitted armies, so
+ * both clients derive an identical board from the same stored rosters.
+ * Returns null if a custom game's armies are missing or fail roster
+ * validation — the caller shows that as an unplayable game rather than
+ * guessing at a position.
+ */
+export function createOnlineInitialState(
+  mode: 'classic' | 'custom' = 'classic',
+  white?: Roster | null,
+  black?: Roster | null,
+): GameState | null {
+  if (mode === 'classic') return createInitialState();
+  if (!white || !black) return null;
+  try {
+    return createGameFromRosters(white, black);
+  } catch {
+    return null;
+  }
+}
 
-export function replayOnlineActions(actions: readonly GameAction[]): ReplayResult {
-  let state = createOnlineInitialState();
+export function replayOnlineActions(
+  actions: readonly GameAction[],
+  initialState?: GameState,
+): ReplayResult {
+  let state = initialState ?? createInitialState();
 
   for (let index = 0; index < actions.length; index++) {
     const action = actions[index]!;

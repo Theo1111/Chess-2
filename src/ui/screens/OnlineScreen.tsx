@@ -13,6 +13,7 @@ import { Board } from '../components/Board';
 import { CapturedPieces } from '../components/CapturedPieces';
 import { MoveChoiceDialog } from '../components/MoveChoiceDialog';
 import { MoveHistory } from '../components/MoveHistory';
+import { OnlineDraft } from './OnlineDraft';
 
 interface OnlineScreenProps {
   user: AccountUser;
@@ -31,17 +32,19 @@ export function OnlineScreen({ user, timeControl, onExit }: OnlineScreenProps) {
   const [gameId, setGameId] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);
   const [lobbyError, setLobbyError] = useState<string | null>(null);
+  // Players only pair with someone who picked the same mode.
+  const [mode, setMode] = useState<'classic' | 'custom'>('classic');
 
   const enterQueue = useCallback(async () => {
     setLobbyError(null);
-    const result = await findOnlineMatch(timeControl, user.displayName);
+    const result = await findOnlineMatch(timeControl, user.displayName, mode);
     if (result.error) {
       setLobbyError(result.error);
       return;
     }
     if (result.gameId) setGameId(result.gameId);
     else setQueued(true);
-  }, [timeControl, user.displayName]);
+  }, [timeControl, user.displayName, mode]);
 
   // Queued: watch for the pairing another player creates.
   useEffect(() => {
@@ -101,10 +104,30 @@ export function OnlineScreen({ user, timeControl, onExit }: OnlineScreenProps) {
             </>
           ) : (
             <>
-              <p className="online-lobby__status">Classic chess, online.</p>
+              <p className="online-lobby__status">Play a ranked-free game against a real opponent.</p>
+              <div className="online-lobby__modes" role="radiogroup" aria-label="Game mode">
+                {(
+                  [
+                    { id: 'classic', label: 'Classic chess', detail: 'Standard armies.' },
+                    { id: 'custom', label: 'Custom armies', detail: '60s to draft after matching.' },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={mode === option.id}
+                    className={`online-lobby__mode${mode === option.id ? ' online-lobby__mode--active' : ''}`}
+                    onClick={() => setMode(option.id)}
+                  >
+                    <span className="online-lobby__mode-name">{option.label}</span>
+                    <span className="online-lobby__mode-detail">{option.detail}</span>
+                  </button>
+                ))}
+              </div>
               <p className="online-lobby__hint">
-                Signed in as <strong>{user.displayName}</strong>. Time control comes from the
-                menu setting; games are currently played unclocked.
+                Signed in as <strong>{user.displayName}</strong>. You are matched with the next
+                player who picks the same mode.
               </p>
               <button type="button" className="button button--primary" onClick={() => void enterQueue()}>
                 Find opponent
@@ -130,11 +153,24 @@ function OnlineGameView({
   onExit: () => void;
 }) {
   const online = useOnlineGame(gameId, user);
-  const { row, replay, myColor, canAct, submit, resign, error } = online;
+  const {
+    row,
+    replay,
+    myColor,
+    canAct,
+    submit,
+    resign,
+    error,
+    draftSecondsLeft,
+    armySubmitted,
+    submitArmy,
+  } = online;
 
   // Hooks must run unconditionally; while the row loads, the controller gets
   // the (inert) starting position and canAct is false.
-  const fallback = useMemo(() => createOnlineInitialState(), []);
+  // Classic start always exists; the `??` keeps types honest for the brief
+  // window before a custom game's armies arrive.
+  const fallback = useMemo(() => createOnlineInitialState('classic')!, []);
   const controller = useOnlineController(
     replay?.state ?? fallback,
     myColor,
@@ -142,10 +178,50 @@ function OnlineGameView({
     (action) => void submit(action),
   );
 
-  if (!row || !replay) {
+  if (!row) {
     return (
       <div className="app">
         <p className="online-lobby__status">Loading game…</p>
+      </div>
+    );
+  }
+
+  // Custom mode: draft first. The board does not exist until both armies do.
+  if (row.status === 'drafting' && myColor) {
+    return (
+      <OnlineDraft
+        color={myColor}
+        secondsLeft={draftSecondsLeft}
+        submitted={armySubmitted}
+        opponentName={myColor === 'white' ? row.black_name : row.white_name}
+        onSubmit={(roster) => void submitArmy(roster)}
+        onLeave={onExit}
+      />
+    );
+  }
+
+  if (row.status === 'cancelled') {
+    return (
+      <div className="app online-lobby">
+        <div className="panel online-lobby__panel">
+          <h2 className="panel__title">Match cancelled</h2>
+          <p className="online-lobby__status">
+            {row.reason === 'draft timed out'
+              ? 'One of you ran out of drafting time.'
+              : (row.reason ?? 'The match was cancelled.')}
+          </p>
+          <button type="button" className="button button--primary" onClick={onExit}>
+            Back to menu
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!replay) {
+    return (
+      <div className="app">
+        <p className="online-lobby__status">Waiting for both armies…</p>
       </div>
     );
   }
@@ -189,7 +265,7 @@ function OnlineGameView({
       <main className="layout">
         <div className="layout__board">
           <CapturedPieces game={replay.state} color="black" />
-          <Board controller={controller} />
+          <Board controller={controller} orientation={myColor ?? 'white'} />
           <CapturedPieces game={replay.state} color="white" />
         </div>
 

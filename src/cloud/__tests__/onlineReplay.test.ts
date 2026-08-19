@@ -3,6 +3,7 @@ import '../../engine/customPieces';
 import '../../engine/rookPieces';
 import '../../engine/knightPieces';
 import '../../engine/bishopPieces';
+import type { GameState } from '../../engine';
 import { createRng } from '../../sim/seededRandom';
 import { generateLegalActions, type GameAction } from '../../ai/actions';
 import {
@@ -13,9 +14,16 @@ import {
 } from '../onlineReplay';
 
 /** A legal random game of `plies` actions, as two honest clients produce. */
+/** Classic mode always produces a position; keeps the tests free of `!`. */
+const classicStart = (): GameState => {
+  const state = createOnlineInitialState('classic');
+  if (!state) throw new Error('classic start must exist');
+  return state;
+};
+
 function randomLog(plies: number, seed: number): GameAction[] {
   const rng = createRng(seed);
-  let state = createOnlineInitialState();
+  let state = classicStart();
   const log: GameAction[] = [];
   for (let i = 0; i < plies; i++) {
     const legal = generateLegalActions(state);
@@ -72,7 +80,7 @@ describe('replayOnlineActions', () => {
   });
 
   it('nextTurnAfter reflects the engine, and outcome reads terminal states', () => {
-    const state = createOnlineInitialState();
+    const state = classicStart();
     const action = generateLegalActions(state)[0]!;
     const next = nextTurnAfter(state, action);
     expect(next.turn).toBe('black'); // classic: no bonus phases
