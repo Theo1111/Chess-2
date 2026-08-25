@@ -1,50 +1,63 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createInitialState, getSpellDefinition, opposite } from '../../engine';
 import type { AccountUser } from '../../cloud/auth';
 import {
   cancelMatchmaking,
   findOnlineMatch,
   myActiveOnlineGame,
 } from '../../cloud/online';
-import { createOnlineInitialState } from '../../cloud/onlineReplay';
 import { useOnlineGame } from '../../cloud/useOnlineGame';
 import { useOnlineController } from '../../cloud/useOnlineController';
-import { getTimeControl, type TimeControlId } from '../timeControls';
-import { Board } from '../components/Board';
+import {
+  DEFAULT_TIME_CONTROL,
+  TIME_CONTROLS,
+  getTimeControl,
+  type TimeControlId,
+} from '../timeControls';
+import { Board, frozenBoard } from '../components/Board';
+import { CardActivation } from '../components/CardActivation';
+import { CardChoiceDialog } from '../components/CardChoiceDialog';
+import { CardHand } from '../components/CardHand';
 import { CapturedPieces } from '../components/CapturedPieces';
+import { ClockPanel } from '../components/ClockPanel';
 import { MoveChoiceDialog } from '../components/MoveChoiceDialog';
 import { MoveHistory } from '../components/MoveHistory';
+import { useCardActivations } from '../useCardActivations';
 import { OnlineDraft } from './OnlineDraft';
 
 interface OnlineScreenProps {
   user: AccountUser;
-  timeControl: TimeControlId;
   onExit: () => void;
 }
 
 /**
  * Online play: find an opponent, then play the shared game.
  *
- * Matching pairs players on the same time-control choice. While queued we
- * poll `my_active_online_game` — the moment someone else's `find_online_match`
- * pairs us, the game id appears and both screens flip to the board.
+ * Every match is a custom-army game: players choose a time control, are
+ * paired with someone who chose the same one, then each drafts an army
+ * before the board appears. While queued we poll `my_active_online_game` —
+ * the moment someone else's `find_online_match` pairs us, the game id
+ * appears and both screens flip to the board.
+ *
+ * The clock lives here rather than on the menu because it is a rule two
+ * strangers agree to; a hot-seat game shares a room and a wall clock.
  */
-export function OnlineScreen({ user, timeControl, onExit }: OnlineScreenProps) {
+export function OnlineScreen({ user, onExit }: OnlineScreenProps) {
   const [gameId, setGameId] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);
   const [lobbyError, setLobbyError] = useState<string | null>(null);
-  // Players only pair with someone who picked the same mode.
-  const [mode, setMode] = useState<'classic' | 'custom'>('classic');
+  const [timeControl, setTimeControl] = useState<TimeControlId>(DEFAULT_TIME_CONTROL);
 
   const enterQueue = useCallback(async () => {
     setLobbyError(null);
-    const result = await findOnlineMatch(timeControl, user.displayName, mode);
+    const result = await findOnlineMatch(timeControl, user.displayName);
     if (result.error) {
       setLobbyError(result.error);
       return;
     }
     if (result.gameId) setGameId(result.gameId);
     else setQueued(true);
-  }, [timeControl, user.displayName, mode]);
+  }, [timeControl, user.displayName]);
 
   // Queued: watch for the pairing another player creates.
   useEffect(() => {
@@ -105,29 +118,33 @@ export function OnlineScreen({ user, timeControl, onExit }: OnlineScreenProps) {
           ) : (
             <>
               <p className="online-lobby__status">Play a ranked-free game against a real opponent.</p>
-              <div className="online-lobby__modes" role="radiogroup" aria-label="Game mode">
-                {(
-                  [
-                    { id: 'classic', label: 'Classic chess', detail: 'Standard armies.' },
-                    { id: 'custom', label: 'Custom armies', detail: '60s to draft after matching.' },
-                  ] as const
-                ).map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={mode === option.id}
-                    className={`online-lobby__mode${mode === option.id ? ' online-lobby__mode--active' : ''}`}
-                    onClick={() => setMode(option.id)}
-                  >
-                    <span className="online-lobby__mode-name">{option.label}</span>
-                    <span className="online-lobby__mode-detail">{option.detail}</span>
-                  </button>
-                ))}
-              </div>
+
+              <section className="online-lobby__timing" aria-label="Time control">
+                <h2 className="online-lobby__timing-title">Time per player</h2>
+                <div
+                  className="online-lobby__timing-options"
+                  role="radiogroup"
+                  aria-label="Time per player"
+                >
+                  {TIME_CONTROLS.map((control) => (
+                    <button
+                      key={control.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={timeControl === control.id}
+                      className={`timechip${timeControl === control.id ? ' timechip--active' : ''}`}
+                      onClick={() => setTimeControl(control.id)}
+                    >
+                      {control.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
               <p className="online-lobby__hint">
                 Signed in as <strong>{user.displayName}</strong>. You are matched with the next
-                player who picks the same mode.
+                player searching on the same time control, then you each get 60 seconds to
+                draft an army.
               </p>
               <button type="button" className="button button--primary" onClick={() => void enterQueue()}>
                 Find opponent
@@ -161,22 +178,20 @@ function OnlineGameView({
     submit,
     resign,
     error,
+    clock,
     draftSecondsLeft,
     armySubmitted,
     submitArmy,
   } = online;
 
-  // Hooks must run unconditionally; while the row loads, the controller gets
-  // the (inert) starting position and canAct is false.
-  // Classic start always exists; the `??` keeps types honest for the brief
-  // window before a custom game's armies arrive.
-  const fallback = useMemo(() => createOnlineInitialState('classic')!, []);
-  const controller = useOnlineController(
-    replay?.state ?? fallback,
-    myColor,
-    canAct,
-    (action) => void submit(action),
-  );
+  // Hooks must run unconditionally; while the row loads (and during the
+  // draft, before either army exists) the controller gets a plain starting
+  // position it can never act on, because canAct is false.
+  const fallback = useMemo(() => createInitialState(), []);
+  const shown = replay?.state ?? fallback;
+  const controller = useOnlineController(shown, myColor, canAct, (action) => void submit(action));
+  const activation = useCardActivations(shown);
+  const strike = activation?.spell === 'rulers-authority' ? activation : null;
 
   if (!row) {
     return (
@@ -186,7 +201,7 @@ function OnlineGameView({
     );
   }
 
-  // Custom mode: draft first. The board does not exist until both armies do.
+  // Draft first: the board does not exist until both armies do.
   if (row.status === 'drafting' && myColor) {
     return (
       <OnlineDraft
@@ -227,6 +242,8 @@ function OnlineGameView({
   }
 
   const opponentName = myColor === 'white' ? row.black_name : row.white_name;
+  // Spectators (no colour of their own) watch from White's side of the table.
+  const viewer = myColor ?? 'white';
   const finished = row.status === 'finished';
   const desynced = !replay.valid;
 
@@ -235,7 +252,9 @@ function OnlineGameView({
     : finished
       ? row.winner === 'draw'
         ? 'Draw'
-        : `${row.winner === 'white' ? row.white_name : row.black_name} wins`
+        : `${row.winner === 'white' ? row.white_name : row.black_name} wins${
+            row.reason === 'timeout' ? ' on time' : ''
+          }`
       : canAct
         ? 'Your move'
         : `Waiting for ${opponentName}…`;
@@ -255,6 +274,7 @@ function OnlineGameView({
           </h1>
           <p className="app__tagline">
             Online — {row.white_name} vs {row.black_name}
+            {clock.enabled && ` · ${getTimeControl(row.time_control as TimeControlId).label} each`}
           </p>
         </div>
         <button type="button" className="button button--ghost" onClick={onExit}>
@@ -264,17 +284,49 @@ function OnlineGameView({
 
       <main className="layout">
         <div className="layout__board">
+          {/* Your own cards lie face up along your edge of the board; the
+              opponent's are backs until the game itself turns one over. */}
+          <CardHand game={replay.state} color={opposite(viewer)} side="opponent" />
           <CapturedPieces game={replay.state} color="black" />
-          <Board controller={controller} orientation={myColor ?? 'white'} />
+          <Board
+            controller={strike ? frozenBoard(strike.before) : controller}
+            orientation={viewer}
+            annihilating={strike?.color ?? null}
+          />
           <CapturedPieces game={replay.state} color="white" />
+          <CardHand
+            game={replay.state}
+            color={viewer}
+            side={myColor ? 'own' : 'opponent'}
+            casting={controller.casting}
+            onSelect={controller.selectSpell}
+            onCancel={controller.cancelSpell}
+            playable={canAct}
+          />
         </div>
 
         <aside className="layout__sidebar">
+          <ClockPanel clock={clock} turn={replay.state.turn} gameOver={finished || desynced} />
           <div className={`panel status${canAct ? ' status--your-turn' : ''}`}>
             <strong>{headline}</strong>
             <span>{detail}</span>
           </div>
           {error && <p className="account__error">{error}</p>}
+          {canAct && replay.state.phase === 'bonus' && (
+            <div className="banner banner--bonus">
+              <strong>
+                {replay.state.pawnOrder?.stage === 'active' ? '📯 Royal Order' : 'Free move'}
+              </strong>
+              <span>
+                {replay.state.pawnOrder?.stage === 'active'
+                  ? 'One of your Pawns may make an extra move.'
+                  : 'Your Duelist may take a free move.'}
+              </span>
+              <button type="button" className="button" onClick={controller.passBonus}>
+                Pass
+              </button>
+            </div>
+          )}
           {!finished && !desynced && myColor && (
             <button type="button" className="button" onClick={() => void resign()}>
               Resign
@@ -283,6 +335,18 @@ function OnlineGameView({
           <MoveHistory history={replay.state.history} />
         </aside>
       </main>
+
+      <CardActivation activation={activation} />
+
+      {controller.cardChoice && (
+        <CardChoiceDialog
+          card={getSpellDefinition(controller.cardChoice.spell).name}
+          color={opposite(viewer)}
+          options={controller.cardChoice.options}
+          onChoose={controller.chooseCard}
+          onCancel={controller.cancelSpell}
+        />
+      )}
 
       {controller.pendingChoice && (
         <MoveChoiceDialog

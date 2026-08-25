@@ -28,6 +28,14 @@ export function describeStatus(game: GameState): StatusText {
         detail: "An Assassin reached the opponent's back row.",
         tone: 'over',
       };
+    case 'annihilation':
+      return {
+        headline: game.winner ? `${colorName(game.winner)} wins` : 'Draw',
+        detail: game.winner
+          ? 'Nothing is left standing but their King.'
+          : 'Nothing is left standing at all.',
+        tone: 'over',
+      };
     case 'stalemate':
       return { headline: 'Draw', detail: `Stalemate — ${mover.toLowerCase()} has no legal moves.`, tone: 'over' };
     case 'draw-fifty-move':

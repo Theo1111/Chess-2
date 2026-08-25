@@ -3,9 +3,29 @@
  * treats game state: nothing mutates, everything returns a new value.
  */
 
-import { RANK_COUNT, makeSquare, rankOf, type Color, type PieceType, type Square } from '../engine';
+import {
+  CASTLING_RULES,
+  RANK_COUNT,
+  makeSquare,
+  rankOf,
+  type Color,
+  type PieceType,
+  type Square,
+} from '../engine';
 import { MANDATORY_PIECE, costOf, costOfCard } from './catalog';
 import type { Roster, RosterUnit } from './types';
+
+/**
+ * The square the King must hold: its traditional home in the middle of the
+ * back rank (e1 / e9). Everything else about an army is the player's choice,
+ * but the crown keeps its seat — which is also what makes castling possible,
+ * since this is the square the castling rules expect a King to stand on.
+ */
+export const throneSquare = (color: Color): Square => CASTLING_RULES[color][0]!.kingFrom;
+
+/** True if this unit is the King and therefore bound to the throne. */
+export const holdsThrone = (roster: Roster, unitId: string): boolean =>
+  roster.units.some((unit) => unit.id === unitId && isMandatory(unit));
 
 /** The two ranks a colour may deploy onto. */
 export function startingRanks(color: Color): readonly number[] {
@@ -33,13 +53,13 @@ function nextUnitId(units: readonly RosterUnit[], type: PieceType): string {
   return `${type}-${index}`;
 }
 
-/** A fresh roster containing only the mandatory (free) King. */
+/** A fresh roster containing only the mandatory (free) King, already enthroned. */
 export function createRoster(color: Color, budget: number): Roster {
   return {
     color,
     budget,
     units: [{ id: `${MANDATORY_PIECE}-1`, type: MANDATORY_PIECE }],
-    placement: {},
+    placement: { [`${MANDATORY_PIECE}-1`]: throneSquare(color) },
     spellIds: [],
     trapIds: [],
   };
@@ -99,8 +119,17 @@ export const unplacedUnits = (roster: Roster): RosterUnit[] =>
 export const unitAt = (roster: Roster, square: Square): RosterUnit | null =>
   roster.units.find((unit) => roster.placement[unit.id] === square) ?? null;
 
-/** Places a unit, evicting whatever already stood there. */
+/**
+ * Places a unit, evicting whatever already stood there. The King is the one
+ * fixed point: it cannot be moved off its throne, and nothing else may take
+ * that square from it.
+ */
 export function placeUnit(roster: Roster, unitId: string, square: Square): Roster {
+  const throne = throneSquare(roster.color);
+  // The King is already where it must be, and the throne is not on offer.
+  if (holdsThrone(roster, unitId)) return roster;
+  if (square === throne && enthronedId(roster) !== null) return roster;
+
   const placement: Record<string, Square> = {};
   for (const [id, value] of Object.entries(roster.placement)) {
     if (value !== square && id !== unitId) placement[id] = value;
@@ -109,27 +138,61 @@ export function placeUnit(roster: Roster, unitId: string, square: Square): Roste
   return { ...roster, placement };
 }
 
+/** The King's unit id, if the army has one. */
+const enthronedId = (roster: Roster): string | null =>
+  roster.units.find(isMandatory)?.id ?? null;
+
+/** Returns a unit to the tray. The King never leaves the board. */
 export function unplaceUnit(roster: Roster, unitId: string): Roster {
+  if (holdsThrone(roster, unitId)) return roster;
   const placement = { ...roster.placement };
   delete placement[unitId];
   return { ...roster, placement };
 }
 
+/** Clears the board back to the King alone, still on its throne. */
 export function clearPlacement(roster: Roster): Roster {
-  return { ...roster, placement: {} };
+  const king = enthronedId(roster);
+  return {
+    ...roster,
+    placement: king === null ? {} : { [king]: throneSquare(roster.color) },
+  };
 }
 
 /** Fills any empty starting squares in order — the builder's "auto-place". */
 export function autoPlace(roster: Roster): Roster {
-  const free = startingSquares(roster.color).filter((square) => unitAt(roster, square) === null);
-  let next = roster;
+  // The King first, so an army restored from before this rule (or mirrored
+  // from a stray placement) is put right rather than left illegal.
+  let next = enthroneKing(roster);
+  const free = startingSquares(next.color).filter((square) => unitAt(next, square) === null);
   let index = 0;
-  for (const unit of unplacedUnits(roster)) {
+  for (const unit of unplacedUnits(next)) {
     const square = free[index++];
     if (square === undefined) break;
     next = placeUnit(next, unit.id, square);
   }
   return next;
+}
+
+/**
+ * Puts the King on its throne, moving aside whatever was standing there.
+ * Armies drafted before the rule existed pass through here on their way to
+ * the board.
+ */
+export function enthroneKing(roster: Roster): Roster {
+  const king = enthronedId(roster);
+  if (king === null) return roster;
+  const throne = throneSquare(roster.color);
+  if (roster.placement[king] === throne) return roster;
+
+  const placement: Record<string, Square> = {};
+  for (const [id, value] of Object.entries(roster.placement)) {
+    // Whoever held the throne is evicted to the tray; there is room, because
+    // the King itself has just left wherever it was.
+    if (id !== king && value !== throne) placement[id] = value;
+  }
+  placement[king] = throne;
+  return { ...roster, placement };
 }
 
 /**

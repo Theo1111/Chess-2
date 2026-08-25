@@ -13,18 +13,62 @@
  */
 
 import { allSpellDefinitions, getSpellDefinition } from '../engine';
-import type { SpellDefinition } from '../engine';
+import type { CardKind, SpellDefinition } from '../engine';
+import { isCardOffered } from './availability';
 import { canAffordCard } from './roster';
 import type { Roster, RosterError } from './types';
 
+/** Every Spell Card in the game, including any an admin switched off. */
+export function allSpellCards(): SpellDefinition[] {
+  return allSpellDefinitions().filter((definition) => !definition.isTrap);
+}
+
+/** Every Trap Card in the game, including any an admin switched off. */
+export function allTrapCards(): SpellDefinition[] {
+  return allSpellDefinitions().filter((definition) => definition.isTrap === true);
+}
+
 /** Every selectable Spell Card, in registry order. */
 export function availableSpellCards(): SpellDefinition[] {
-  return allSpellDefinitions().filter((definition) => !definition.isTrap);
+  return allSpellCards().filter((definition) => isCardOffered(definition.id));
 }
 
 /** Every selectable Trap Card, in registry order. */
 export function availableTrapCards(): SpellDefinition[] {
-  return allSpellDefinitions().filter((definition) => definition.isTrap === true);
+  return allTrapCards().filter((definition) => isCardOffered(definition.id));
+}
+
+/**
+ * The kinds a deck is built from, in the order the builder shows them.
+ * Everything that is not a trap shares the spell deck — decks are two lists
+ * because that is what a saved army stores, while `kind` is what a player
+ * sees.
+ */
+export const CARD_KINDS: readonly CardKind[] = ['spell', 'relic', 'curse', 'terrain', 'trap'];
+
+export const CARD_KIND_LABELS: Readonly<Record<CardKind, string>> = {
+  spell: 'Spells',
+  relic: 'Relics',
+  curse: 'Curses',
+  terrain: 'Terrain',
+  trap: 'Traps',
+};
+
+/**
+ * Selectable cards of one kind, in registry order. Secret cards are left out
+ * — they are shown apart, under their own heading, to the few clients that
+ * can see them at all.
+ */
+export function availableCardsOfKind(kind: CardKind): SpellDefinition[] {
+  const pool = kind === 'trap' ? availableTrapCards() : availableSpellCards();
+  return pool.filter((definition) => definition.kind === kind && definition.secret !== true);
+}
+
+/** Selectable secret cards — empty unless this client has them unlocked. */
+export function availableSecretCards(): SpellDefinition[] {
+  return [...availableSpellCards(), ...availableTrapCards()].filter(
+    (definition) => definition.secret === true,
+  );
 }
 
 const isKnownCard = (id: string): boolean => {
@@ -47,7 +91,7 @@ export function toggleSpellCard(roster: Roster, id: string): Roster {
   if (roster.spellIds.includes(id)) {
     return { ...roster, spellIds: roster.spellIds.filter((existing) => existing !== id) };
   }
-  if (!isKnownCard(id) || isTrapCard(id)) return roster;
+  if (!isKnownCard(id) || isTrapCard(id) || !isCardOffered(id)) return roster;
   if (!canAffordCard(roster, id)) return roster;
   return { ...roster, spellIds: [...roster.spellIds, id] };
 }
@@ -57,7 +101,7 @@ export function toggleTrapCard(roster: Roster, id: string): Roster {
   if (roster.trapIds.includes(id)) {
     return { ...roster, trapIds: roster.trapIds.filter((existing) => existing !== id) };
   }
-  if (!isTrapCard(id)) return roster;
+  if (!isTrapCard(id) || !isCardOffered(id)) return roster;
   if (!canAffordCard(roster, id)) return roster;
   return { ...roster, trapIds: [...roster.trapIds, id] };
 }

@@ -10,9 +10,11 @@ import {
 import {
   autoPlace,
   clearPlacement,
+  isMandatory,
   isReadyToPlay,
   isStartingSquare,
   placeUnit,
+  throneSquare,
   unitAt,
   unplaceUnit,
   unplacedUnits,
@@ -37,12 +39,18 @@ const FILES = Array.from({ length: FILE_COUNT }, (_, index) => index);
  * Deployment: drag (or click-click) each unit onto any square in the player's
  * first two rows. Pieces can be picked up from the tray or moved between
  * squares; clicking a placed piece returns it to the tray.
+ *
+ * The King is the exception. It keeps its traditional seat — e1 for White,
+ * e9 for Black — so it is rendered fixed there and cannot be picked up: that
+ * square is what makes castling possible, and the roster layer refuses to
+ * move it anyway.
  */
 export function PlacementScreen({ color, roster, onChange, onConfirm, onBack }: PlacementScreenProps) {
   const [held, setHeld] = useState<RosterUnit | null>(null);
   const heldRef = useRef<RosterUnit | null>(null);
   /** Square the held unit was picked up from, to tell a click from a drag. */
   const pickupSquareRef = useRef<number | null>(null);
+  const throne = throneSquare(color);
   const tray = unplacedUnits(roster);
   const ready = isReadyToPlay(roster);
   const placementErrors = validatePlacement(roster);
@@ -128,13 +136,15 @@ export function PlacementScreen({ color, roster, onChange, onConfirm, onBack }: 
                 FILES.map((file) => {
                   const square = makeSquare(file, rank);
                   const unit = unitAt(roster, square);
-                  const legal = isStartingSquare(color, square);
+                  const isThrone = square === throne;
+                  const legal = isStartingSquare(color, square) && !isThrone;
                   const classes = [
                     'square',
                     // Matches the board artwork: a1 is a light square.
                     (file + rank) % 2 === 0 ? 'square--light' : 'square--dark',
                     legal ? 'square--zone' : '',
                     legal && held ? 'square--zone-active' : '',
+                    isThrone ? 'square--throne' : '',
                   ]
                     .filter(Boolean)
                     .join(' ');
@@ -146,7 +156,10 @@ export function PlacementScreen({ color, roster, onChange, onConfirm, onBack }: 
                       role="gridcell"
                       data-square={square}
                       className={classes}
-                      aria-label={`${squareName(square)}${unit ? `, ${getPieceDefinition(unit.type).name}` : ''}`}
+                      aria-label={`${squareName(square)}${
+                        isThrone ? ', the throne' : ''
+                      }${unit ? `, ${getPieceDefinition(unit.type).name}` : ''}`}
+                      title={isThrone ? `The King holds ${squareName(throne)}` : undefined}
                       onPointerDown={() => {
                         if (held && legal && held.id !== unit?.id) {
                           // click-to-place: second click drops the held piece
@@ -154,7 +167,8 @@ export function PlacementScreen({ color, roster, onChange, onConfirm, onBack }: 
                           pick(null);
                           return;
                         }
-                        if (unit) {
+                        // The King is not for moving, so it is not for picking up.
+                        if (unit && !isMandatory(unit)) {
                           pickupSquareRef.current = square;
                           pick(unit);
                         }
@@ -208,7 +222,9 @@ export function PlacementScreen({ color, roster, onChange, onConfirm, onBack }: 
             )}
             <p className="placement__hint">
               Drag a piece onto the highlighted squares, or click it and then click a square.
-              Click a placed piece to pick it back up; drop it here to unplace it.
+              Click a placed piece to pick it back up; drop it here to unplace it. Your King
+              holds {squareName(throne)} and cannot be moved — keep a piece in a corner and it
+              can castle with whatever is standing there.
             </p>
           </section>
 

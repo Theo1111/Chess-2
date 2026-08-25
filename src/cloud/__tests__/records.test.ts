@@ -25,8 +25,8 @@ describe('buildMatchRow', () => {
     game = play(game, 'e2', 'e4');
     game = play(game, 'e8', 'e7'); // any legal black reply
 
-    const row = buildMatchRow({ game, mode: 'classic', timeControl: '10' });
-    expect(row.mode).toBe('classic');
+    const row = buildMatchRow({ game, timeControl: '10' });
+    expect(row.mode).toBe('custom');
     expect(row.time_control).toBe('10');
     expect(row.plies).toBe(2);
     expect(row.moves).toHaveLength(2);
@@ -42,7 +42,6 @@ describe('buildMatchRow', () => {
     game = play(game, 'e2', 'e4');
     const row = buildMatchRow({
       game,
-      mode: 'classic',
       timeControl: '5',
       override: { winner: 'black', reason: 'timeout' },
     });
@@ -52,17 +51,16 @@ describe('buildMatchRow', () => {
 
   it('draw statuses store as draws with their reason', () => {
     const drawn = { ...createStateFromFen(), status: 'draw-fifty-move' as const };
-    const row = buildMatchRow({ game: drawn, mode: 'classic', timeControl: 'unlimited' });
+    const row = buildMatchRow({ game: drawn, timeControl: 'unlimited' });
     expect(row.winner).toBe('draw');
     expect(row.reason).toBe('draw-fifty-move');
   });
 
-  it('custom matches carry both rosters and the content fingerprint', () => {
+  it('matches carry both rosters and the content fingerprint', () => {
     const white = autoPlace(addUnit(createRoster('white', DEFAULT_ROSTER_BUDGET), 'rook'));
     const black = autoPlace(addUnit(createRoster('black', DEFAULT_ROSTER_BUDGET), 'rook'));
     const row = buildMatchRow({
       game: createStateFromFen(),
-      mode: 'custom',
       timeControl: 'unlimited',
       armies: { white, black },
       contentFingerprint: 'abc123',

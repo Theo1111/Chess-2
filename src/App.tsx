@@ -1,3 +1,4 @@
+import { AdminDashboard } from './ui/screens/AdminDashboard';
 import { GameScreen } from './ui/screens/GameScreen';
 import { MainMenu } from './ui/screens/MainMenu';
 import { MatchHistory } from './ui/screens/MatchHistory';
@@ -5,6 +6,7 @@ import { OnlineScreen } from './ui/screens/OnlineScreen';
 import { PlacementScreen } from './ui/screens/PlacementScreen';
 import { TeamBuilder } from './ui/screens/TeamBuilder';
 import { useAppFlow } from './ui/useAppFlow';
+import { useContentFlagSync } from './ui/useContentFlags';
 import { useAccount } from './cloud/useAccount';
 
 /**
@@ -14,17 +16,18 @@ import { useAccount } from './cloud/useAccount';
 export default function App() {
   const flow = useAppFlow();
   const account = useAccount();
+  // Which pieces and cards are currently offered, published by an admin —
+  // and, for an admin, the secret ones too.
+  useContentFlagSync(account.isAdmin);
   const { screen, draft } = flow;
 
   const menu = (
     <MainMenu
-      onClassic={flow.startClassic}
       onDraft={flow.startDraft}
       onOnline={flow.toOnline}
-      timeControl={flow.timeControl}
-      onTimeControl={flow.setTimeControl}
       account={account}
       onShowHistory={flow.toHistory}
+      onOpenAdmin={flow.toAdmin}
     />
   );
 
@@ -59,24 +62,27 @@ export default function App() {
 
     case 'game':
       return (
-        <GameScreen
-          mode={screen.mode}
-          draft={draft}
-          timeControl={flow.timeControl}
-          user={account.user}
-          onExit={flow.toMenu}
-        />
+        <GameScreen draft={draft} user={account.user} onExit={flow.toMenu} />
       );
 
     case 'history':
       // Signing out while on the history screen falls back to the menu.
       return account.user ? <MatchHistory user={account.user} onBack={flow.toMenu} /> : menu;
 
+    case 'admin':
+      // The dashboard is offered to admins only, and the table's row-level
+      // security is what actually enforces that — this is just the door.
+      return account.user && account.isAdmin ? (
+        <AdminDashboard user={account.user} onBack={flow.toMenu} />
+      ) : (
+        menu
+      );
+
     case 'online':
       // Online play requires a signed-in account; signing out mid-screen
       // falls back to the menu rather than stranding a headless lobby.
       return account.user ? (
-        <OnlineScreen user={account.user} timeControl={flow.timeControl} onExit={flow.toMenu} />
+        <OnlineScreen user={account.user} onExit={flow.toMenu} />
       ) : (
         menu
       );

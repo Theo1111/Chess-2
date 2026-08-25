@@ -1,21 +1,29 @@
 /**
- * Spell cards — one-shot tactical actions cast instead of a chess move.
+ * Cards — one-shot actions played instead of a chess move.
  *
- * Spells are data in a registry, exactly like pieces: a definition describes
+ * Cards are data in a registry, exactly like pieces: a definition describes
  * targeting, legality and resolution; `castSpell` is the single entry point
  * that validates a cast, applies it, and passes the turn. Adding a card means
  * registering a definition — the turn system, UI targeting flow, history and
  * persistence pick it up automatically.
+ *
+ * Five kinds share that one pipeline (`SpellDefinition.kind`):
+ *   spell   — open, immediate magic (Shield, Freeze, Teleport…)
+ *   trap    — hidden placements that fire on an enemy (Tripwire, Mine…)
+ *   relic   — equipment worn by a piece until something spends it
+ *   curse   — magic that sits on an enemy piece and resolves later
+ *   terrain — construction: walls and portals, which belong to the board
  *
  * Enforcement of ongoing effects does NOT live here: a resolved Shield or
  * Freeze is an `ActiveEffect`, applied by the engine's existing funnels
  * (captureRules / isImmobilized). This module only creates them.
  */
 
-import { BOARD_SIZE, fileOf, rankOf, squareName } from './board';
+import { BOARD_SIZE, fileOf, isInside, makeSquare, rankOf, squareName } from './board';
 import {
   blockedSquares,
   isCardImmuneAt,
+  isPortal,
   nullFieldSquares,
   regionSquares,
   tickPlies,
@@ -23,13 +31,15 @@ import {
 } from './boardEffects';
 import { processTraps } from './traps';
 import type { RegionEffect, SquareStatus, TrapKind, TrapPlacement } from './boardEffects';
-import { tickEffects } from './effects';
+import { beginTurn, hasEffect, pruneEffects } from './effects';
 import type { ActiveEffect } from './effects';
 import { isImmobilized } from './auras';
 import { settle } from './game';
-import { isRoyalAttacked } from './moveGeneration';
+import { isRoyalAttacked, royalSquares } from './moveGeneration';
 import { toFen } from './fen';
-import { getPieceDefinition } from './pieces';
+import { changeType } from './apply';
+import { allPieceDefinitions, getPieceDefinition } from './pieces';
+import type { PieceClass } from './pieces';
 import { classOfPiece } from './captureRules';
 import { surroundingSquares } from './knightPieces';
 import type { Color, GameState, PieceType, SpellCast, Square } from './types';
@@ -41,13 +51,38 @@ export type SpellTargeting =
   | 'enemy-piece'
   | 'square'
   | 'friendly-piece-then-square'
-  | 'friendly-piece-then-adjacent-enemy';
+  | 'friendly-piece-then-adjacent-enemy'
+  | 'square-then-square'
+  | 'square-then-adjacent-square';
+
+/**
+ * What sort of card this is. Presentation groups by it, and two rules read
+ * it: Null Field suppresses magic but not construction, and a set trap keeps
+ * its identity hidden.
+ */
+export type CardKind = 'spell' | 'trap' | 'relic' | 'curse' | 'terrain';
+
+/** Which selection stages of a targeting mode point at a PIECE. */
+export function pieceTargetStages(targeting: SpellTargeting): readonly (0 | 1)[] {
+  switch (targeting) {
+    case 'friendly-piece':
+    case 'enemy-piece':
+    case 'friendly-piece-then-square':
+      return [0];
+    case 'friendly-piece-then-adjacent-enemy':
+      return [0, 1];
+    default:
+      return [];
+  }
+}
 
 export interface SpellDefinition {
   readonly id: string;
   readonly name: string;
   /** Emoji used on the card and in compact UI. */
   readonly icon: string;
+  /** Defaults to 'spell'; `registerTrap` sets 'trap'. */
+  readonly kind: CardKind;
   readonly description: string;
   /**
    * Roster point cost — cards share the army budget with pieces. Data here,
@@ -65,9 +100,24 @@ export interface SpellDefinition {
    * changed parts of the state (board/effects/pools). Turn passing, history
    * and status are handled by `castSpell`.
    */
-  readonly resolve: (state: GameState, caster: Color, targets: readonly Square[]) => Partial<GameState>;
+  readonly resolve: (
+    state: GameState,
+    caster: Color,
+    targets: readonly Square[],
+    choice?: PieceType,
+  ) => Partial<GameState>;
+  /**
+   * Cards that also ask their caster to name a piece — the Transform curse
+   * picks what its victim becomes. Given the chosen targets, the legal
+   * answers; a card without this must not be handed a choice.
+   */
+  readonly choices?: (
+    state: GameState,
+    caster: Color,
+    targets: readonly Square[],
+  ) => PieceType[];
   /** History label, e.g. "Shield→e4". */
-  readonly describe: (targets: readonly Square[]) => string;
+  readonly describe: (targets: readonly Square[], choice?: PieceType) => string;
   /** Extra playability requirement beyond having the card (Last Stand…). */
   readonly castable?: (state: GameState, caster: Color) => boolean;
   /**
@@ -78,6 +128,12 @@ export interface SpellDefinition {
   readonly isTrap?: boolean;
   /** Which selection stages point at pieces (Sacred Ground immunity applies). */
   readonly pieceStages?: readonly (0 | 1)[];
+  /**
+   * A card that is not in the public catalog. The draft only offers it to
+   * clients that have unlocked secrets (admin accounts); the engine plays it
+   * like any other card, because the engine does not know what an account is.
+   */
+  readonly secret?: boolean;
   /**
    * Full card-face artwork (a public asset path). Cards without art fall
    * back to their icon-and-text presentation.
@@ -111,10 +167,27 @@ const CARD_ARTWORK: Readonly<Record<string, string>> = {
   'dead-zone': '/card_art/dead-zone.png',
 };
 
-export function registerSpell(definition: SpellDefinition): void {
+/**
+ * `kind` defaults to 'spell' and `isTrap` is derived from it, so every
+ * existing trap check keeps working while the registry gains a vocabulary.
+ */
+export function registerSpell(definition: RegisteredCard): void {
+  const kind: CardKind = definition.kind ?? (definition.isTrap === true ? 'trap' : 'spell');
   const artwork = definition.artwork ?? CARD_ARTWORK[definition.id];
-  registry.set(definition.id, artwork ? { ...definition, artwork } : definition);
+  registry.set(definition.id, {
+    ...definition,
+    kind,
+    isTrap: kind === 'trap',
+    ...(artwork ? { artwork } : {}),
+  });
 }
+
+/** What a card registration may leave out: the kind, which defaults. */
+type RegisteredCard = Omit<SpellDefinition, 'kind'> & { readonly kind?: CardKind };
+
+/** Every card of one kind, in registry order. */
+export const cardsOfKind = (kind: CardKind): SpellDefinition[] =>
+  [...registry.values()].filter((definition) => definition.kind === kind);
 
 export function getSpellDefinition(id: string): SpellDefinition {
   const definition = registry.get(id);
@@ -594,6 +667,340 @@ registerTrap({
     'Hidden. Arms under the enemy piece that lands here; once that piece leaves by any means, the square becomes impassable terrain for one full round.',
 });
 
+
+/* ------------------------------------------------------------------ */
+/* Relics — equipment a piece wears until something spends it          */
+/* ------------------------------------------------------------------ */
+
+/** Squares a card may build on: empty, unblocked, and not already claimed. */
+const buildableSquares = (state: GameState): Square[] => {
+  const blocked = blockedSquares(state);
+  const squares: Square[] = [];
+  for (let square = 0; square < BOARD_SIZE; square++) {
+    if (state.board[square] || blocked.has(square)) continue;
+    if (trapAt(state, square)) continue;
+    if (isPortal(state, square)) continue;
+    squares.push(square);
+  }
+  return squares;
+};
+
+const orthogonalNeighbours = (square: Square): Square[] => {
+  const file = fileOf(square);
+  const rank = rankOf(square);
+  const out: Square[] = [];
+  for (const [df, dr] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ] as const) {
+    if (isInside(file + df, rank + dr)) out.push(makeSquare(file + df, rank + dr));
+  }
+  return out;
+};
+
+/** Pieces already wearing this relic — a second copy would do nothing. */
+const withoutEffect = (state: GameState, squares: Square[], kind: ActiveEffect['kind']): Square[] =>
+  squares.filter((square) => {
+    const piece = state.board[square];
+    return piece !== null && piece !== undefined && !hasEffect(state.effects, kind, piece.id);
+  });
+
+registerSpell({
+  id: 'mirror-shield',
+  name: 'Mirror Shield',
+  icon: '🪞',
+  kind: 'relic',
+  cost: 3,
+  description:
+    'Equip a friendly piece. The first enemy card that targets it is turned aside — that card is spent for nothing, and so is this relic.',
+  targeting: 'friendly-piece',
+  pieceStages: [0],
+  primaryTargets: (state, caster) =>
+    withoutEffect(state, friendlyPieces(state, caster, true), 'mirror-shield'),
+  resolve: (state, caster, [target]) => {
+    const piece = state.board[target!];
+    if (!piece) return {};
+    return {
+      effects: [
+        ...state.effects,
+        {
+          id: `mirror-shield:${piece.id}:${state.fullmoveNumber}`,
+          kind: 'mirror-shield' as const,
+          caster,
+          targetPieceId: piece.id,
+          // Worn until an enemy card breaks on it.
+          expiresAtTurnStartOf: null,
+        },
+      ],
+    };
+  },
+  describe: (targets) => `Mirror Shield→${squareName(targets[0]!)}`,
+});
+
+registerSpell({
+  id: 'crown-of-command',
+  name: 'Crown of Command',
+  icon: '👑',
+  kind: 'relic',
+  cost: 4,
+  description:
+    'Equip a non-royal friendly piece. The next time it moves, one of your Pawns may immediately make an extra move. The crown is then spent.',
+  targeting: 'friendly-piece',
+  pieceStages: [0],
+  // A crown with no Pawn to command is a wasted card.
+  castable: (state, caster) =>
+    state.board.some(
+      (piece) => piece?.color === caster && classOfPiece(piece.type) === 'pawn',
+    ),
+  primaryTargets: (state, caster) =>
+    withoutEffect(state, friendlyPieces(state, caster, false), 'crown'),
+  resolve: (state, caster, [target]) => {
+    const piece = state.board[target!];
+    if (!piece) return {};
+    return {
+      effects: [
+        ...state.effects,
+        {
+          id: `crown:${piece.id}:${state.fullmoveNumber}`,
+          kind: 'crown' as const,
+          caster,
+          targetPieceId: piece.id,
+          expiresAtTurnStartOf: null,
+        },
+      ],
+    };
+  },
+  describe: (targets) => `Crown of Command→${squareName(targets[0]!)}`,
+});
+
+/* ------------------------------------------------------------------ */
+/* Terrain — construction, which belongs to the board                  */
+/* ------------------------------------------------------------------ */
+
+/** Two rounds: one turn each, twice. */
+const WALL_PLIES = 4;
+
+registerSpell({
+  id: 'wall',
+  name: 'Wall',
+  icon: '🧱',
+  kind: 'terrain',
+  cost: 3,
+  description:
+    'Raise a wall across two adjacent empty squares. Nothing may stand on them or move through them for two rounds.',
+  targeting: 'square-then-adjacent-square',
+  primaryTargets: (state) =>
+    buildableSquares(state).filter((square) => {
+      const open = new Set(buildableSquares(state));
+      return orthogonalNeighbours(square).some((neighbour) => open.has(neighbour));
+    }),
+  secondaryTargets: (state, _caster, first) => {
+    const open = new Set(buildableSquares(state));
+    return orthogonalNeighbours(first).filter((square) => open.has(square));
+  },
+  resolve: (state, caster, targets) => ({
+    squareStatuses: [
+      ...state.squareStatuses,
+      ...targets.map((square) => ({
+        id: `wall:${square}:${state.fullmoveNumber}:${caster[0]}`,
+        kind: 'wall' as const,
+        owner: caster,
+        square,
+        pliesRemaining: WALL_PLIES,
+      })),
+    ],
+  }),
+  describe: (targets) => `Wall→${squareName(targets[0]!)}+${squareName(targets[1]!)}`,
+});
+
+registerSpell({
+  id: 'portal',
+  name: 'Portal',
+  icon: '🌀',
+  kind: 'terrain',
+  cost: 3,
+  description:
+    'Open a gate on each of two empty squares. A piece standing on one may step out of the other, arriving without crossing the ground between. The gates stay open.',
+  targeting: 'square-then-square',
+  primaryTargets: (state) => (buildableSquares(state).length >= 2 ? buildableSquares(state) : []),
+  secondaryTargets: (state, _caster, first) =>
+    buildableSquares(state).filter((square) => square !== first),
+  resolve: (state, caster, targets) => ({
+    portals: [
+      ...state.portals,
+      {
+        id: `portal:${targets[0]!}-${targets[1]!}:${state.fullmoveNumber}`,
+        owner: caster,
+        squares: [targets[0]!, targets[1]!] as const,
+      },
+    ],
+  }),
+  describe: (targets) => `Portal→${squareName(targets[0]!)}⇄${squareName(targets[1]!)}`,
+});
+
+/* ------------------------------------------------------------------ */
+/* Curses — magic that sits on an enemy piece and resolves later       */
+/* ------------------------------------------------------------------ */
+
+/** Turns its owner still gets with the cursed piece before it crumbles. */
+const DECAY_TURNS = 3;
+
+registerSpell({
+  id: 'decay',
+  name: 'Decay',
+  icon: '🦠',
+  kind: 'curse',
+  cost: 4,
+  description:
+    'Curse an enemy piece. After three of its owner’s turns it crumbles to dust — destroyed, not captured. Kings and Queen-class pieces are too strong to rot.',
+  targeting: 'enemy-piece',
+  pieceStages: [0],
+  primaryTargets: (state, caster) =>
+    withoutEffect(
+      state,
+      enemyPieces(state, caster, false).filter(
+        (square) => classOfPiece(state.board[square]!.type) !== 'queen',
+      ),
+      'decay',
+    ),
+  resolve: (state, caster, [target]) => {
+    const piece = state.board[target!];
+    if (!piece) return {};
+    return {
+      effects: [
+        ...state.effects,
+        {
+          id: `decay:${piece.id}:${state.fullmoveNumber}`,
+          kind: 'decay' as const,
+          caster,
+          targetPieceId: piece.id,
+          expiresAtTurnStartOf: null,
+          // One more than the promised turns: the cast itself ends the
+          // caster's turn, so the first countdown lands on the victim's
+          // turn as it begins — before they have had it for a turn at all.
+          turnsRemaining: DECAY_TURNS + 1,
+        },
+      ],
+    };
+  },
+  describe: (targets) => `Decay→${squareName(targets[0]!)}`,
+});
+
+/**
+ * The demotion ladder. Bishops and Knights share a rung, so one may not be
+ * turned into the other — only down into a Pawn-class piece.
+ */
+const CLASS_RANK: Readonly<Record<PieceClass, number>> = {
+  king: 5,
+  queen: 4,
+  rook: 3,
+  bishop: 2,
+  knight: 2,
+  pawn: 1,
+};
+
+/** Every piece strictly below `type` on the ladder. Royals are never on it. */
+export function lesserPieceTypes(type: PieceType): PieceType[] {
+  const own = classOfPiece(type);
+  if (own === undefined) return [];
+  const rank = CLASS_RANK[own];
+  return allPieceDefinitions()
+    .filter(
+      (definition) =>
+        definition.pieceClass !== undefined &&
+        !definition.royal &&
+        CLASS_RANK[definition.pieceClass] < rank,
+    )
+    .map((definition) => definition.type)
+    .sort();
+}
+
+registerSpell({
+  id: 'transform',
+  name: 'Transform',
+  icon: '🐸',
+  kind: 'curse',
+  cost: 5,
+  description:
+    'Curse an enemy piece into a lesser one of your choosing: Queen-class → Rook-class → Bishop/Knight-class → Pawn-class. A King is beyond the spell.',
+  targeting: 'enemy-piece',
+  pieceStages: [0],
+  primaryTargets: (state, caster) =>
+    enemyPieces(state, caster, false).filter(
+      (square) => lesserPieceTypes(state.board[square]!.type).length > 0,
+    ),
+  choices: (state, _caster, targets) => {
+    const piece = state.board[targets[0]!];
+    return piece ? lesserPieceTypes(piece.type) : [];
+  },
+  resolve: (state, _caster, [target], choice) => {
+    const piece = state.board[target!];
+    if (!piece || choice === undefined) return {};
+    const board = state.board.slice();
+    board[target!] = changeType(piece, choice);
+    // The piece is a new one as far as identity goes, so anything attached
+    // to the old shape — a Mirror Shield, a Decay — falls off with it.
+    return { board, effects: pruneEffects(state.effects, board) };
+  },
+  describe: (targets, choice) =>
+    `Transform→${squareName(targets[0]!)}=${choice ? getPieceDefinition(choice).name : '?'}`,
+});
+
+
+/* ------------------------------------------------------------------ */
+/* The secret card                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Ruler's Authority — a joke card, and deliberately a broken one.
+ *
+ * It is `secret`, so the Army Builder only offers it to an admin account
+ * (see `roster/availability.ts`, and the server-side gate on submitting an
+ * online army in `supabase/admin.sql`). The engine treats it as an ordinary
+ * untargeted card: one side ends the turn with a King and nothing else, which
+ * `computeStatus` reads as an annihilation.
+ */
+registerSpell({
+  id: 'rulers-authority',
+  name: "Ruler's Authority",
+  icon: '⚡',
+  kind: 'spell',
+  secret: true,
+  cost: 0,
+  description:
+    'The Ruler speaks once. Every piece on the board is annihilated but your King — and every trap, ward, wall and gate with them. Nothing is left to argue with.',
+  targeting: 'none',
+  // The Ruler must be alive to give the order.
+  castable: (state, caster) => royalSquares(state.board, caster).length > 0,
+  resolve: (state, caster) => {
+    const board = state.board.slice();
+    let reserves = state.reserves;
+
+    for (let square = 0; square < BOARD_SIZE; square++) {
+      const piece = board[square];
+      if (!piece) continue;
+      // The one exception, and the whole joke.
+      if (piece.color === caster && getPieceDefinition(piece.type).royal) continue;
+      board[square] = null;
+      // Destruction, not capture: nothing is credited to anyone.
+      reserves = { ...reserves, [piece.color]: [...reserves[piece.color], piece.type] };
+    }
+
+    return {
+      board,
+      reserves,
+      effects: [],
+      traps: [],
+      regions: [],
+      squareStatuses: [],
+      portals: [],
+    };
+  },
+  describe: () => "Ruler's Authority",
+});
+
 /* ------------------------------------------------------------------ */
 /* Casting                                                             */
 /* ------------------------------------------------------------------ */
@@ -610,7 +1017,9 @@ function filterStage(
   stage: 0 | 1,
   squares: Square[],
 ): Square[] {
-  if (definition.isTrap) return squares;
+  // A Null Field suppresses magic. A trap is a mechanism and terrain is
+  // masonry — neither is stopped by it.
+  if (definition.kind === 'trap' || definition.kind === 'terrain') return squares;
   const nulls = nullFieldSquares(state);
   let filtered = nulls.size ? squares.filter((square) => !nulls.has(square)) : squares;
   if (definition.pieceStages?.includes(stage)) {
@@ -659,6 +1068,71 @@ const expectedTargetCount = (targeting: SpellTargeting): number => {
 };
 
 /**
+ * The relic that stops this cast, if the card points at a piece wearing one.
+ * Only an ENEMY piece's shield deflects: your own relic never turns aside
+ * your own Shield or Teleport.
+ */
+function mirrorShieldAgainst(
+  state: GameState,
+  definition: SpellDefinition,
+  caster: Color,
+  targets: readonly Square[],
+): ActiveEffect | undefined {
+  if (state.effects.length === 0) return undefined;
+  for (const stage of pieceTargetStages(definition.targeting)) {
+    const square = targets[stage];
+    if (square === undefined) continue;
+    const piece = state.board[square];
+    if (!piece || piece.color === caster) continue;
+    const shield = state.effects.find(
+      (effect) => effect.kind === 'mirror-shield' && effect.targetPieceId === piece.id,
+    );
+    if (shield) return shield;
+  }
+  return undefined;
+}
+
+/**
+ * True if a Mirror Shield would break this cast before it resolves — which
+ * means it changes nothing at all. Exported because the action layer has to
+ * model the same rule to keep its legality probe honest (see actions.ts).
+ */
+export function castWouldBeDeflected(
+  state: GameState,
+  spell: string,
+  caster: Color,
+  targets: readonly Square[],
+): boolean {
+  let definition: SpellDefinition;
+  try {
+    definition = getSpellDefinition(spell);
+  } catch {
+    return false;
+  }
+  return mirrorShieldAgainst(state, definition, caster, targets) !== undefined;
+}
+
+/**
+ * Crosses the turn boundary a cast creates: board effects age, curses count
+ * down, and anything that crumbled joins its owner's reserves.
+ */
+function endTurn(state: GameState, enemy: Color): GameState {
+  const started = beginTurn(state.board, state.effects, enemy, 'main');
+  let reserves = state.reserves;
+  for (const lost of started.decayed) {
+    reserves = { ...reserves, [lost.color]: [...reserves[lost.color], lost.type] };
+  }
+  return {
+    ...state,
+    board: started.board,
+    effects: started.effects,
+    reserves,
+    squareStatuses: tickPlies(state.squareStatuses),
+    regions: tickPlies(state.regions),
+  };
+}
+
+/**
  * Validates and resolves a spell cast. Returns the next game state, or null
  * when the cast is illegal (unknown/used card, bad targets, or a result that
  * leaves the caster's king in check). Casting consumes the turn.
@@ -698,6 +1172,15 @@ export function castSpell(state: GameState, cast: SpellCast): GameState | null {
     }
   }
 
+  // A card that names a piece as well as a square must name a legal one —
+  // and a card that asks for no such choice must not be handed one.
+  if (definition.choices) {
+    const allowed = definition.choices(state, caster, targets);
+    if (cast.choice === undefined || !allowed.includes(cast.choice)) return null;
+  } else if (cast.choice !== undefined) {
+    return null;
+  }
+
   const fenBefore = toFen(state);
   const enemy = opposite(caster);
   const consumedBook = {
@@ -718,7 +1201,34 @@ export function castSpell(state: GameState, cast: SpellCast): GameState | null {
     return settle(state, armed, { cast, san: 'Royal Order', fenBefore });
   }
 
-  const changes = definition.resolve(state, caster, targets);
+  // A Mirror Shield turns aside the first enemy card that points at its
+  // wearer: the card is spent for nothing, and so is the relic. Checked
+  // before resolution, so the card never touches the board at all.
+  const deflector = mirrorShieldAgainst(state, definition, caster, targets);
+  if (deflector) {
+    const fizzled: GameState = {
+      ...state,
+      spells: { ...state.spells, [caster]: consumedBook },
+      effects: state.effects.filter((effect) => effect.id !== deflector.id),
+      turn: enemy,
+      phase: 'main',
+      enPassant: null,
+      ambush: null,
+      pawnOrder: null,
+      halfmoveClock: state.halfmoveClock + 1,
+      fullmoveNumber: caster === 'black' ? state.fullmoveNumber + 1 : state.fullmoveNumber,
+    };
+    // Spending a turn on a card that fizzles still may not leave your own
+    // king in check — a cast made under check has to answer it.
+    if (isRoyalAttacked(fizzled, caster)) return null;
+    return settle(state, endTurn(fizzled, enemy), {
+      cast,
+      san: `${definition.name}✗`,
+      fenBefore,
+    });
+  }
+
+  const changes = definition.resolve(state, caster, targets, cast.choice);
 
   const next: GameState = {
     ...state,
@@ -748,20 +1258,14 @@ export function castSpell(state: GameState, cast: SpellCast): GameState | null {
   // waiting on (Teleport, Sacrifice) — activate such zones now.
   const trapped = processTraps(next, null, false);
 
-  // The enemy's turn now begins: prune dead targets and expire anything
-  // scheduled for this boundary.
-  const ticked: GameState = {
-    ...next,
-    traps: trapped.traps,
-    squareStatuses: tickPlies(trapped.squareStatuses),
-    regions: tickPlies(next.regions),
-    effects: tickEffects(next.effects, next.board, enemy, 'main'),
-  };
+  // The enemy's turn now begins: prune dead targets, expire anything
+  // scheduled for this boundary, and let curses count down.
+  const ticked = endTurn({ ...next, traps: trapped.traps, squareStatuses: trapped.squareStatuses }, enemy);
 
   const san =
     cast.spell === 'reconnaissance'
       ? `Recon: ${reconPicks(state, caster).map((id) => getSpellDefinition(id).name).join(' + ') || 'nothing'}`
-      : definition.describe(targets);
+      : definition.describe(targets, cast.choice);
 
   return settle(state, ticked, { cast, san, fenBefore });
 }

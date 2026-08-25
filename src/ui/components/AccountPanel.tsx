@@ -5,7 +5,9 @@ import { CLOUD_SETUP_HINT } from '../../cloud/supabaseClient';
 interface AccountPanelProps {
   user: AccountUser | null;
   cloudConfigured: boolean;
+  isAdmin: boolean;
   onShowHistory: () => void;
+  onOpenAdmin: () => void;
 }
 
 /**
@@ -16,7 +18,13 @@ interface AccountPanelProps {
  * The password field is real account auth handled entirely by Supabase's SDK
  * over HTTPS — it is never logged or stored by the app itself.
  */
-export function AccountPanel({ user, cloudConfigured, onShowHistory }: AccountPanelProps) {
+export function AccountPanel({
+  user,
+  cloudConfigured,
+  isAdmin,
+  onShowHistory,
+  onOpenAdmin,
+}: AccountPanelProps) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,7 +50,18 @@ export function AccountPanel({ user, cloudConfigured, onShowHistory }: AccountPa
           <span className="account__email">{user.email}</span>
         </p>
         <p className="account__hint">Finished games are saved to your match history.</p>
+        {isAdmin && (
+          <p className="account__badge">
+            <span aria-hidden="true">🛡️</span> Admin — you decide which pieces and cards
+            are available.
+          </p>
+        )}
         <div className="account__actions">
+          {isAdmin && (
+            <button type="button" className="button button--primary" onClick={onOpenAdmin}>
+              Admin dashboard
+            </button>
+          )}
           <button type="button" className="button" onClick={onShowHistory}>
             Match history
           </button>

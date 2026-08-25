@@ -3,27 +3,26 @@ import '../../engine/customPieces';
 import '../../engine/rookPieces';
 import '../../engine/knightPieces';
 import '../../engine/bishopPieces';
-import type { GameState } from '../../engine';
+import { createInitialState, type GameState } from '../../engine';
 import { createRng } from '../../sim/seededRandom';
 import { generateLegalActions, type GameAction } from '../../ai/actions';
 import {
-  createOnlineInitialState,
   nextTurnAfter,
   replayOnlineActions,
   replayOutcome,
 } from '../onlineReplay';
 
-/** A legal random game of `plies` actions, as two honest clients produce. */
-/** Classic mode always produces a position; keeps the tests free of `!`. */
-const classicStart = (): GameState => {
-  const state = createOnlineInitialState('classic');
-  if (!state) throw new Error('classic start must exist');
-  return state;
-};
+/**
+ * The bare starting position — no cards, no ability pieces. Replay validation
+ * is about the log, not about which army produced the board, so the tests
+ * exercise it from the simplest position the engine can build.
+ */
+const plainStart = (): GameState => createInitialState();
 
+/** A legal random game of `plies` actions, as two honest clients produce. */
 function randomLog(plies: number, seed: number): GameAction[] {
   const rng = createRng(seed);
-  let state = classicStart();
+  let state = plainStart();
   const log: GameAction[] = [];
   for (let i = 0; i < plies; i++) {
     const legal = generateLegalActions(state);
@@ -72,7 +71,7 @@ describe('replayOnlineActions', () => {
     expect(result.valid).toBe(result.failedAt === null);
   });
 
-  it('spell actions are never legal online (classic has no cards)', () => {
+  it('spell actions are rejected in a position that has no cards', () => {
     const spell: GameAction = { kind: 'spell', spell: 'shield', targets: [10], trap: false };
     const result = replayOnlineActions([spell]);
     expect(result.valid).toBe(false);
@@ -80,10 +79,10 @@ describe('replayOnlineActions', () => {
   });
 
   it('nextTurnAfter reflects the engine, and outcome reads terminal states', () => {
-    const state = classicStart();
+    const state = plainStart();
     const action = generateLegalActions(state)[0]!;
     const next = nextTurnAfter(state, action);
-    expect(next.turn).toBe('black'); // classic: no bonus phases
+    expect(next.turn).toBe('black'); // no ability pieces: no bonus phases
 
     expect(replayOutcome(state).over).toBe(false);
     const finished = { ...state, status: 'checkmate' as const, winner: 'black' as const };

@@ -1,10 +1,14 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   generateLegalMovesFrom,
+  getSpellDefinition,
   legalMovesBetween,
   royalSquares,
+  spellPrimaryTargets,
+  spellSecondaryTargets,
   type GameState,
   type Move,
+  type PieceType,
   type Square,
 } from '../engine';
 import type { GameAction } from '../ai/actions';
@@ -18,8 +22,9 @@ import type { GameAction } from '../ai/actions';
  * server). Selection is restricted to the viewer's own pieces on their own
  * turn — the opponent's pieces are display-only.
  *
- * Spells are absent because online v1 is classic chess; `spellTargets` stays
- * empty and `casting` null to satisfy the shared interface.
+ * Cards work exactly as they do locally, except that a finished cast is
+ * submitted as a `spell` action instead of being applied: the server stores
+ * it, and every client replays it through the same engine.
  */
 
 export function useOnlineController(
@@ -34,6 +39,21 @@ export function useOnlineController(
     to: Square;
     options: readonly Move[];
   } | null>(null);
+  const [casting, setCasting] = useState<{ spell: string; first: Square | null } | null>(null);
+  const [cardChoice, setCardChoice] = useState<{
+    spell: string;
+    targets: readonly Square[];
+    options: readonly PieceType[];
+  } | null>(null);
+
+  // An armed card is only meaningful on this player's own turn; losing the
+  // turn (or the game ending) disarms it.
+  useEffect(() => {
+    if (!canAct) {
+      setCasting(null);
+      setCardChoice(null);
+    }
+  }, [canAct]);
 
   const movesBySquare = useMemo(() => {
     const map = new Map<Square, Move[]>();
@@ -53,14 +73,77 @@ export function useOnlineController(
     return royalSquares(game.board, game.turn)[0] ?? null;
   }, [game]);
 
-  const play = useCallback(
-    (move: Move) => {
+  /** Squares the armed card may currently target. */
+  const spellTargets = useMemo(() => {
+    if (!casting || !canAct || myColor === null) return new Set<Square>();
+    const list =
+      casting.first === null
+        ? spellPrimaryTargets(game, myColor, casting.spell)
+        : spellSecondaryTargets(game, myColor, casting.spell, casting.first);
+    return new Set(list);
+  }, [game, casting, canAct, myColor]);
+
+  const submit = useCallback(
+    (action: GameAction) => {
       setSelected(null);
       setPendingChoice(null);
-      onAction({ kind: 'move', move });
+      setCasting(null);
+      setCardChoice(null);
+      onAction(action);
     },
     [onAction],
   );
+
+  const play = useCallback((move: Move) => submit({ kind: 'move', move }), [submit]);
+
+  /** Arms (or disarms) a card. Untargeted cards are submitted immediately. */
+  const selectSpell = useCallback(
+    (spell: string) => {
+      if (!canAct || myColor === null) return;
+      if (game.phase !== 'main' || game.pawnOrder !== null) return;
+      if (casting?.spell === spell) {
+        setCasting(null);
+        return;
+      }
+      if (!game.spells[myColor].available.includes(spell)) return;
+
+      const definition = getSpellDefinition(spell);
+      if (definition.targeting === 'none') {
+        submit({ kind: 'spell', spell, targets: [], trap: definition.isTrap === true });
+        return;
+      }
+      setSelected(null);
+      setPendingChoice(null);
+      setCasting({ spell, first: null });
+    },
+    [canAct, myColor, game, casting, submit],
+  );
+
+  const cancelSpell = useCallback(() => {
+    setCasting(null);
+    setCardChoice(null);
+  }, []);
+
+  /** Answers a card's piece question and submits the cast. */
+  const chooseCard = useCallback(
+    (choice: PieceType) => {
+      if (!canAct || !cardChoice || !cardChoice.options.includes(choice)) return;
+      submit({
+        kind: 'spell',
+        spell: cardChoice.spell,
+        targets: cardChoice.targets,
+        trap: getSpellDefinition(cardChoice.spell).isTrap === true,
+        choice,
+      });
+    },
+    [canAct, cardChoice, submit],
+  );
+
+  /** Declines an optional bonus move (Duelist free move / Royal Order pawn). */
+  const passBonus = useCallback(() => {
+    if (!canAct) return;
+    submit({ kind: 'pass' });
+  }, [canAct, submit]);
 
   const tryMove = useCallback(
     (from: Square, to: Square): boolean => {
@@ -82,13 +165,44 @@ export function useOnlineController(
   const selectSquare = useCallback(
     (square: Square) => {
       if (!canAct || pendingChoice) return;
+
+      // An armed card swallows board clicks until it is cast or cancelled.
+      if (casting) {
+        if (!spellTargets.has(square)) return;
+        const needsSecond =
+          getSpellDefinition(casting.spell).targeting.includes('then') && casting.first === null;
+        if (needsSecond) {
+          setCasting({ spell: casting.spell, first: square });
+          return;
+        }
+        const targets = casting.first === null ? [square] : [casting.first, square];
+
+        // A card that also names a piece pauses here for that answer.
+        const choices = getSpellDefinition(casting.spell).choices;
+        if (choices && myColor !== null) {
+          const options = choices(game, myColor, targets);
+          if (options.length === 0) return;
+          setCasting(null);
+          setCardChoice({ spell: casting.spell, targets, options });
+          return;
+        }
+
+        submit({
+          kind: 'spell',
+          spell: casting.spell,
+          targets,
+          trap: getSpellDefinition(casting.spell).isTrap === true,
+        });
+        return;
+      }
+
       if (selected !== null && selected !== square && tryMove(selected, square)) return;
 
       const piece = game.board[square];
       const selectable = piece !== null && piece !== undefined && piece.color === myColor;
       setSelected(selectable && square !== selected ? square : null);
     },
-    [game, canAct, pendingChoice, selected, tryMove, myColor],
+    [game, canAct, pendingChoice, selected, tryMove, myColor, casting, spellTargets, submit],
   );
 
   const chooseMove = useCallback(
@@ -107,14 +221,19 @@ export function useOnlineController(
     game,
     selected,
     pendingChoice,
-    casting: null,
+    casting,
     movesBySquare,
     lastMove,
     checkSquare,
-    spellTargets: useMemo(() => new Set<Square>(), []),
+    spellTargets,
     selectSquare,
     tryMove,
     chooseMove,
     cancelChoice,
+    selectSpell,
+    cancelSpell,
+    cardChoice,
+    chooseCard,
+    passBonus,
   };
 }

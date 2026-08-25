@@ -21,6 +21,7 @@
 import {
   canCastSpells,
   castSpell,
+  castWouldBeDeflected,
   generateLegalMoves,
   getSpellDefinition,
   isGameOver,
@@ -33,6 +34,7 @@ import {
   type Color,
   type GameState,
   type Move,
+  type PieceType,
   type SpellDefinition,
   type SpellTargeting,
   type Square,
@@ -54,6 +56,8 @@ export interface SpellAction {
   readonly spell: string;
   readonly targets: readonly Square[];
   readonly trap: boolean;
+  /** The piece a card asks its caster to name (the Transform curse). */
+  readonly choice?: PieceType;
 }
 
 /** Declining the optional bonus move (Duelist free move / Royal Order pawn). */
@@ -117,18 +121,34 @@ function spellActions(state: GameState, caster: Color, spell: string): SpellActi
    * the engine exactly. The round-trip test in actions.test.ts guards this
    * from drifting if castSpell grows new checks.
    */
-  const leavesRoyalAttacked = (targets: readonly Square[]): boolean => {
-    if (spell === 'royal-order') {
-      // Royal Order changes no board state at cast time.
+  const leavesRoyalAttacked = (targets: readonly Square[], choice?: PieceType): boolean => {
+    // Royal Order changes no board state at cast time, and neither does a
+    // card that is about to break on a Mirror Shield — so the position each
+    // has to answer for is the one already on the board. (Which is why a
+    // deflected card can never be used to escape a check.)
+    if (spell === 'royal-order' || castWouldBeDeflected(state, spell, caster, targets)) {
       return isRoyalAttacked(state, caster);
     }
-    const probe: GameState = { ...state, ...definition.resolve(state, caster, targets) };
+    const probe: GameState = { ...state, ...definition.resolve(state, caster, targets, choice) };
     return isRoyalAttacked(probe, caster);
   };
 
   const actions: SpellAction[] = [];
+  /**
+   * A card that asks its caster to name a piece offers one action per legal
+   * answer: choosing what a Transform leaves behind is as much a decision as
+   * choosing whom to cast it on.
+   */
   const offer = (targets: readonly Square[]) => {
-    if (!leavesRoyalAttacked(targets)) actions.push({ kind: 'spell', spell, targets, trap });
+    if (!definition.choices) {
+      if (!leavesRoyalAttacked(targets)) actions.push({ kind: 'spell', spell, targets, trap });
+      return;
+    }
+    for (const choice of definition.choices(state, caster, targets)) {
+      if (!leavesRoyalAttacked(targets, choice)) {
+        actions.push({ kind: 'spell', spell, targets, trap, choice });
+      }
+    }
   };
 
   if (stages === 0) {
@@ -161,6 +181,7 @@ export function applyGameAction(state: GameState, action: GameAction): GameState
         spell: action.spell,
         color: state.turn,
         targets: action.targets,
+        ...(action.choice === undefined ? {} : { choice: action.choice }),
       });
       if (!next) {
         throw new Error(
@@ -212,7 +233,7 @@ export function actionKey(action: GameAction): string {
       ].join(':');
     }
     case 'spell':
-      return `s:${action.spell}:${action.targets.join(',')}`;
+      return `s:${action.spell}:${action.targets.join(',')}:${action.choice ?? ''}`;
     case 'pass':
       return 'p';
   }

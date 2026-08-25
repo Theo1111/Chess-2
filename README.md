@@ -2,7 +2,7 @@
 
 Chess, but you build your own army. Two local players draft custom rosters from a point
 budget, deploy them anywhere on their first two ranks, and play with full chess rules —
-check, checkmate and king safety included. Classic chess is still available untouched.
+check, checkmate and king safety included.
 
 **Batch 1A** ships the roster system with twelve Queen-class pieces:
 Queen, Archbishop, Trapper, Revolutionary, Duelist, Chariot, Champion, Avenger, General,
@@ -41,7 +41,7 @@ value — destruction is not a capture, so no on-capture ability triggers). Cast
 card consumes the whole turn; each card is one-shot. Spells are a registry like pieces
 (`spells.ts`), ongoing statuses are generic `ActiveEffect`s enforced inside the
 engine's existing capture/immobility funnels, and hidden cards are only readable via
-`visibleOpponentSpells`. Classic-chess mode keeps spells off.
+`visibleOpponentSpells`. A position built without card decks keeps spells off.
 
 **Batch 6** grows the hand to 16 cards: seven new spells — Smoke Screen (3×3 fog for
 two rounds; the opponent cannot see the pieces inside), Reconnaissance (glimpse two
@@ -63,9 +63,9 @@ roster and carried into the match — during play each side only has the cards i
 brought. A fifth trap, **Mine** (destroys the enemy piece that lands on it —
 destruction, not capture; kings survive; king-safety fizzle like Tripwire),
 completes the trap pool. Spells and traps are one category throughout the UI: a
-single CARDS tab in the builder and a single Cards panel in the match, each with
-labelled Spells / Traps rows (the engine still distinguishes traps mechanically —
-hidden placement, no Null Field suppression).
+single CARDS tab in the builder and, in the match, a hand at each edge of the board
+(the engine still distinguishes traps mechanically — hidden placement, no Null Field
+suppression).
 (Originally exactly 5+5 free cards; superseded by shared-budget pricing below.)
 
 **Shared-budget cards**: spells and traps are priced content drawn from the SAME
@@ -82,11 +82,55 @@ gather information. Smoke Screen and Recon prices carry the limited-fidelity
 caveat and are first in line for re-pricing. The budget rose **42 → 55** so the
 classic 5+5-style loadout (~11–20 pts of cards) still leaves a traditional army.
 
+**Batch 10** settles where the King stands and who it may castle with. The King now
+holds its traditional seat — **e1 for White, e9 for Black** — and nothing else about
+deployment changed: every other piece still goes anywhere in the two home ranks. The
+throne is not a suggestion; the roster layer refuses to move the King off it, refuses
+to let anything else take the square, and `validatePlacement` rejects an army (a saved
+one from before the rule, or a tampered payload) that breaks it. `autoPlace` repairs
+such an army instead of leaving it illegal, and the placement screen renders the
+square as spoken for.
+
+That fixed seat is what makes castling possible again, and because an army chooses its
+own deployment, **the corner is not reserved for Rooks**: whatever friendly piece holds
+a1 / i1 (a9 / i9) is the King's castling partner. Only its square matters, never its
+type — a Catapult, a Champion or a Pawn will do. Rights are derived from the board at
+setup (`castlingRightsFromBoard`): a wing is available when the King is on its throne
+and *someone* holds that corner, so emptying a corner is a real cost. Everything else
+is standard: nothing between, no castling out of, through, or into check, rights lost
+the moment either square is touched — plus one Chess 2 rule, that a frozen or webbed
+partner cannot be swung around the King.
+
+**Batch 9** adds three new card classes, so a deck is no longer just spells and
+traps. **Relics** are equipment worn by a piece until something spends it:
+*Mirror Shield* (3) turns aside the first enemy card that targets its wearer —
+that card is spent for nothing, and so is the relic — and *Crown of Command* (4)
+buys its owner a bonus Pawn move the first time the crowned piece moves.
+**Terrain** is construction, which belongs to the board and is not suppressed by
+a Null Field: *Wall* (3) makes two adjacent empty squares impassable for two
+rounds, and *Portal* (3) opens two gates a piece may step between, arriving
+without crossing the ground in between (so nothing on the way — a Tripwire, an
+Ambusher — can touch it). **Curses** sit on an enemy piece and resolve later:
+*Decay* (4) crumbles its victim after three of its owner's turns (destroyed, not
+captured; Kings and Queen-class pieces are too strong to rot) and *Transform* (5)
+demotes a piece down the class ladder — Queen → Rook → Bishop/Knight → Pawn —
+into any piece of a lower class **you** choose.
+
+All five kinds run through the one card pipeline: `SpellDefinition.kind` is what
+the builder groups by and what two rules read (Null Field suppresses magic but
+not masonry; a set trap keeps its identity hidden). Transform is the first card
+that asks its caster a question as well as a target, so `SpellCast` gained an
+optional `choice` and definitions an optional `choices` list — the action layer
+enumerates one action per legal answer, which is how the AI, the balance lab and
+online replay all pick it up unchanged. The new prices are estimates, not
+evidence: unlike the original cards they have not been through a baseline run.
+
 **Batch 8** grows the arena: the board is now **9×9** (files a–i, ranks 1–9) and the
 roster budget is **55 points** (originally 42; raised when cards joined the pool). Deployment zones are each side's first two ranks (1–2
 and 8–9), pawns start on ranks 2/8 and promote on 9/1, castling uses the a/i-file
-rooks around the centred king on the e-file, and classic mode fields a symmetric
-twin-queen lineup (RNBQKQBNR + nine pawns). The perft suite now holds self-generated
+corners around the centred king on the e-file, and the standard position (used by the
+perft suite and the FEN tests) fields a symmetric twin-queen lineup (RNBQKQBNR + nine
+pawns). The perft suite now holds self-generated
 regression anchors: the original 8×8 fixtures were externally validated before the
 migration, and the same positions embedded into 9×9 lock the move generator against
 change.
@@ -125,10 +169,34 @@ everything stacks.
 **Card art**: the official 14-card art kit lives in `public/card_art/` and is mapped
 onto the card definitions via a single id → asset table in `spells.ts`
 (`SpellDefinition.artwork`). The Army Builder deck tiles render the full card faces
-(2:3, lazy-loaded); the match UI keeps compact icon buttons and floats the full
-artwork beside the sidebar on hover. Royal Order, Tripwire and Mine have no art yet
-and fall back to icon tiles. (The kit's `07_royal_order.png` is actually the Shield
+(2:3, lazy-loaded), and so do the hands in the match (below). Royal Order, Tripwire
+and Mine have no art yet and fall back to icon tiles. (The kit's `07_royal_order.png` is actually the Shield
 card — it is mapped by its content, not its filename.)
+
+**Card hands**: cards are held at the table, not listed in a panel. Each side gets a
+hand along its edge of the board ([CardHand.tsx](src/ui/components/CardHand.tsx)):
+yours face up and playable at the bottom, the opponent's face down across from you —
+a count, never a list. Hovering one of your own cards raises and enlarges it and
+prints its rules beneath the board; arming a card docks the targeting prompt to the
+hand. Spent cards move to a small pile beside the hand: your own face up, the
+opponent's face up only for spells they cast openly — a spent trap card stays face
+down, because it may still be armed somewhere on the board. Nothing in the UI can
+turn an enemy card over: face-up enemy cards come from `visibleOpponentSpells`
+(i.e. Reveal), and hot-seat play simply swaps which hand is open as the turn passes.
+
+**Card activation**: playing a card takes over the screen for a beat
+([CardActivation.tsx](src/ui/components/CardActivation.tsx)) — the card slams in face
+down, holds, then turns over in a burst of light with its name. A **trap** never turns
+over when it is set: it stays face down, exactly as the opponent is entitled to see
+it, and flips face up later, when it actually fires. The moments are derived from the
+game state alone by comparing consecutive positions
+([useCardActivations.ts](src/ui/useCardActivations.ts)): a new `cast` in the history,
+or a trap that just became `revealed`. That is what keeps the animation from leaking
+anything the position does not already say —
+[cardActivations.test.ts](src/ui/__tests__/cardActivations.test.ts) pins it, including
+that a set trap's id never reaches the UI. The layer is decorative: it takes no
+pointer events, never blocks play, and collapses to a plain fade under
+`prefers-reduced-motion`.
 
 **Painted card art**: thirty-one of the thirty-four draftable pieces have a painted
 full-card asset — ten Queen-class in `public/queen-class/` (emerald frames), seven
@@ -283,7 +351,7 @@ src/
   `moveGeneration.ts`, board effects in `apply.ts`, turn phases in `game.ts`. The engine
   never names a specific piece.
 - **Auras** are computed per position, cached per board, and skipped entirely when no
-  ability piece is on the board — classic chess pays nothing for the system.
+  ability piece is on the board — a plain chess position pays nothing for the system.
 - **Turn phases**: a turn is `main`, optionally followed by `bonus` (the Duelist's free
   move) which only bonus-granting pieces may use; checkmate is never delayed by it.
 - **Move variants**: one square-to-square gesture can map to several distinct moves
@@ -505,23 +573,142 @@ Setup:
 
 4. Restart the dev server. The menu's Account panel switches from a setup hint
    to sign-in / create-account.
+5. Run [`supabase/online.sql`](supabase/online.sql),
+   [`supabase/online-custom.sql`](supabase/online-custom.sql) and
+   [`supabase/online-clock.sql`](supabase/online-clock.sql) for online play,
+   drafting and the match clock.
+6. Optional: run [`supabase/admin.sql`](supabase/admin.sql) to enable admin
+   accounts and the content config (below).
+
+### The online clock
+
+Time controls belong to online play: the picker lives in the online lobby,
+because a clock is a rule two strangers agree to before a game — two players
+sharing a screen also share a wall clock, so a local hot-seat match is untimed.
+Players are paired on the control they picked.
+
+The clock is kept **by the server** ([online-clock.sql](supabase/online-clock.sql)),
+for the same reason the drafting deadline is: a paused tab, a throttled timer
+or a tampered client must never buy a player extra time. Each side's remaining
+milliseconds live on the game row and are charged from `now() - turn_started_at`
+every time an action is appended; White's clock starts the moment both armies
+are in. A bonus phase that keeps the same player on turn keeps charging them,
+which is correct. An action that arrives after its sender's flag has fallen is
+**not recorded** — the game is finished on time instead (reported as `-1`
+rather than by raising, which would roll the finish back with it).
+
+Losing on time is therefore never a client's verdict. Either player may ask
+(`claim_online_timeout`) and the server recomputes the elapsed time itself, so
+an early or forged claim simply answers "active" and both clients can safely
+race to call it. On the client the countdown is a pure projection of the row
+([onlineClock.ts](src/cloud/onlineClock.ts), unit-tested), rendered by the same
+`ClockPanel` local games used to use; `useOnlineClock` only redraws it and asks
+for the flag. Because the row's stamps are the server's, the hook measures its
+own device's offset once through `server_time()` — a laptop with a wrong system
+clock still shows the true countdown.
+
+### Admins & the content config
+
+`supabase/admin.sql` adds two tables. `admins` is who may change the game's
+content; it has a select policy for your own row and **no** insert/update/delete
+policy at all, so a grant can only be made from the SQL editor (service role) —
+a player cannot promote themselves by writing to a row they own. The script
+grants `wagtrack@gmail.com` at the bottom; change the address there to promote
+anyone else (the account has to exist first).
+
+`content_flags` is the published catalog config: one row per piece or card the
+admin has an opinion about, **public to read** (every client must see the same
+catalog, signed in or not) and writable only when `public.is_admin()` passes. A
+missing row means "available", so the table only ever stores deviations and an
+empty table means the game is exactly as it ships.
+
+An admin account gets an **Admin dashboard** button in the account popover
+([AdminDashboard.tsx](src/ui/screens/AdminDashboard.tsx)): every piece and card
+with an on/off switch. Each toggle is applied locally first and then written;
+a refused write (which is what anyone without a grant gets, whatever the client
+believes) rolls back and shows the server's reason.
+
+On the client the config lives in the roster layer
+([availability.ts](src/roster/availability.ts)) — a framework-free store the
+catalog consults, mirrored into React through `useSyncExternalStore`
+([useContentFlags.ts](src/ui/useContentFlags.ts)). `draftablePieces()`,
+`availableSpellCards()` and `availableTrapCards()` return only what is switched
+on, and `validateAvailability` flags an army carrying content that has since
+been withdrawn (mirrored, or built earlier), which blocks the builder's confirm.
+
+It is availability, not a rule: **nothing in `src/engine` imports it**. A game
+already under way, a match being replayed from history and the balance
+laboratory are all unaffected by a piece being switched off — which is also why
+availability is validated separately from `validateComposition`, so an army
+saved before the change is still structurally legal everywhere else. A build
+without Supabase, or a failed request, leaves the full shipped catalog in place:
+a network problem must never take content away mid-draft.
 
 Architecture (`src/cloud/`): `supabaseClient.ts` reads the env and degrades to
 null when unconfigured — every caller handles that, which is what keeps the app
 fully playable offline; `records.ts` holds the pure GameState→row builders
-(unit-tested, no network); `auth.ts`/`storage.ts` return `{ error }` results
-instead of throwing; `useAccount.ts` exposes the session to React. Nothing in
+(unit-tested, no network); `auth.ts`/`storage.ts`/`content.ts` return
+`{ error }` results instead of throwing; `useAccount.ts` exposes the session —
+and whether it is an admin — to React. Nothing in
 `src/engine` or `src/balance` imports any of it. Match saves are fire-and-forget
 on game end — a failed sync logs a warning and never touches gameplay.
 
+**And one secret card.** *Ruler's Authority* (0 pts) annihilates every piece on
+the board but the caster's King — and every trap, ward, wall and gate with them.
+It is a joke card and deliberately a broken one: the turn it is played is the
+turn the game ends. It carries `secret: true`, so the Army Builder only offers it
+under a 🔒 heading to an admin account, and it is not dealt into the standard
+card set — it can only reach a game through a drafted army. Playing it does not
+flip a card: it fires a railgun
+([RailgunStrike.tsx](src/ui/components/RailgunStrike.tsx)) — the board's light is
+dragged into the muzzle, the screen whites out, a lance crosses the world with
+chromatic fringes and shockwaves, and the decree lands. Four seconds of CSS
+keyframes over a dozen divs; no assets, and a plain flash under
+`prefers-reduced-motion`.
+
+Because a King can now leave the board, `GameStatus` gained `annihilation`: a
+side with no royal piece has lost, whatever the rest of the position says.
+Ordinary chess can never reach that; a card can.
+
+**The secret is hidden on the client and enforced on the server.**
+`availability.ts` holds a `secretsUnlocked` flag set from the signed-in account's
+admin grant, which keeps the card out of the catalog, out of `toggleSpellCard`
+and out of a valid roster. That is a courtesy, not a boundary — a modified client
+could still build one. What actually stops it in an ONLINE game is
+`submit_online_army` in [admin.sql](supabase/admin.sql), which refuses a roster
+containing a secret card from anyone without a grant. A local hot-seat game has
+no server in the loop and so cannot be gated at all.
+
+### How the new classes plug in
+
+Nothing about them is special-cased outside their own definitions:
+
+- **Relics and curses are `ActiveEffect`s** with no expiry — `expiresAtTurnStartOf: null`
+  means "until something spends it", so `tickEffects` leaves them alone and
+  `pruneEffects` still drops them when the piece dies. Each is enforced in exactly
+  one funnel: Mirror Shield in `castSpell`, the Crown in `applyMove` (it arms the
+  same bonus window a Royal Order does), Decay in `beginTurn`.
+- **`beginTurn`** is the shared turn-boundary helper both `advance` and `castSpell`
+  call: effects age, and a Decay whose victim is the side now to move counts down.
+  A piece that crumbles joins its owner's reserves — destruction, not capture, so
+  nothing is credited and no on-capture ability fires.
+- **Walls are square statuses** (`blockedSquares` already made terrain impassable);
+  **portals are their own field** on `GameState` because, unlike every other board
+  effect, terrain that was built stays built and so carries no ply counter. A piece
+  standing on a gate gets one extra `teleport` move in the generator.
+- **A deflected card is still a spent turn** — and because it changes nothing, it
+  can never be used to answer a check. `castWouldBeDeflected` exists so the action
+  layer's legality probe models the same rule; the two disagreeing is precisely the
+  bug the random-play fuzz caught.
+
 ## Known limitations
 
-- Local hot-seat only: no undo, no clocks, no board flip, no saved games, no AI — all
-  deliberately out of scope so far.
+- Local hot-seat games are untimed and have no undo, no saved games and no AI — all
+  deliberately out of scope so far. The clock is an online feature (above).
 - Both players draft on one screen in sequence, so White can see Black's roster being
   built (and vice versa). Hidden drafting needs the future online/multi-screen layer.
-- Castling is disabled in custom-army games (a drafted army has no home-square rooks);
-  classic games keep it fully.
+- Castling in a custom army needs a piece left in a corner: the rights are read off
+  the deployment, so an army that empties both corners simply cannot castle.
 - Threefold repetition keys include hit-point, free-move and ambush-window state, but
   the Warrior's "moved last turn" flag is not part of the repetition key.
 - The ambush window tracks only the last movement of a turn: if a player moves and then
@@ -530,7 +717,7 @@ on game end — a failed sync logs a warning and never touches gameplay.
   squares (sliders, double pushes, Diplomat and Ram leaps); L-shaped leaps and
   teleports (Squire jump, Royal Swap) expose nothing.
 - Draws by threefold repetition and the fifty-move rule are applied automatically rather
-  than being claimable, and there is no draw-offer or resign flow.
+  than being claimable, and there is no draw-offer flow (online games can resign).
 - Insufficient-material detection covers the standard cases (K vs K, K+minor vs K, and
   same-coloured bishops); with an unrecognised custom piece on the board it conservatively
   reports "sufficient".
@@ -538,3 +725,12 @@ on game end — a failed sync logs a warning and never touches gameplay.
   if long-lived states are ever kept in memory in bulk.
 - Piece artwork is deliberately simple placeholder SVG, isolated in `ui/pieces/` so a
   Chess 2 art pass replaces it in one file.
+- The relic, curse and terrain cards are priced by judgement rather than by a
+  balance run, and none of them has card-face art yet.
+- A Transform can create a piece neither army drafted, and the resulting type is
+  not checked against the admin content config — availability gates drafting, not
+  what a card may conjure mid-game.
+- The secret card's client-side hiding is a courtesy; only online army submission
+  is enforced server-side (see above). It is also unpriced by design: at 0 points
+  it is a joke, not a balance decision, and the balance laboratory does not draft
+  secret cards.

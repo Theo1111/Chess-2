@@ -2,10 +2,12 @@ import { Fragment, useMemo, useState } from 'react';
 import type { Color, PieceDefinition, PieceType, SpellDefinition } from '../../engine';
 import {
   AVAILABLE_CLASSES,
+  CARD_KINDS,
+  CARD_KIND_LABELS,
   CLASS_LABELS,
   addUnit,
-  availableSpellCards,
-  availableTrapCards,
+  availableCardsOfKind,
+  availableSecretCards,
   canAfford,
   canAffordCard,
   cardCost,
@@ -20,12 +22,14 @@ import {
   toggleSpellCard,
   toggleTrapCard,
   unitCost,
+  validateAvailability,
   validateComposition,
   validateLoadout,
   type Roster,
 } from '../../roster';
 import { PieceCardFace, PieceCardOverlay } from '../components/PieceCardOverlay';
 import { PieceIcon } from '../pieces/PieceIcon';
+import { useContentFlags } from '../useContentFlags';
 
 interface TeamBuilderProps {
   color: Color;
@@ -40,9 +44,17 @@ interface TeamBuilderProps {
 type BuilderTab = 'pieces' | 'cards' | 'operator';
 
 export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirror }: TeamBuilderProps) {
-  const catalog = useMemo(() => draftablePieces(), []);
-  const spellPool = useMemo(() => availableSpellCards(), []);
-  const trapPool = useMemo(() => availableTrapCards(), []);
+  // The catalog is whatever an admin currently offers. Subscribing re-renders
+  // this screen when that config changes; the pools are three cheap filters
+  // over the registries, so they are simply rebuilt each render rather than
+  // memoised against a dependency the linter cannot see.
+  useContentFlags();
+  const catalog = draftablePieces();
+  const cardPools = [
+    ...CARD_KINDS.map((kind) => ({ kind, label: CARD_KIND_LABELS[kind], cards: availableCardsOfKind(kind) })),
+    // Empty for everyone but an admin, and therefore invisible to everyone else.
+    { kind: 'secret', label: '🔒 Secret', cards: availableSecretCards() },
+  ];
   const [inspected, setInspected] = useState<PieceType>(catalog[0]?.type ?? 'queen');
   const [tab, setTab] = useState<BuilderTab>('pieces');
   /**
@@ -54,14 +66,18 @@ export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirr
 
   const compositionErrors = validateComposition(roster);
   const loadoutErrors = validateLoadout(roster);
+  // Content withdrawn since this army was built (mirrored, or restored).
+  const unavailable = validateAvailability(roster);
   const spent = rosterCost(roster);
   const remaining = remainingBudget(roster);
   const dockedDefinition = catalog.find((definition) => definition.type === inspected) ?? catalog[0];
   const pinnedDefinition = pinnedPiece
     ? (catalog.find((definition) => definition.type === pinnedPiece) ?? null)
     : null;
-  const readyToPlace = isCompositionLegal(roster) && loadoutErrors.length === 0;
-  const feedback = compositionErrors[0]?.message ?? loadoutErrors[0]?.message ?? null;
+  const readyToPlace =
+    isCompositionLegal(roster) && loadoutErrors.length === 0 && unavailable.length === 0;
+  const feedback =
+    unavailable[0]?.message ?? compositionErrors[0]?.message ?? loadoutErrors[0]?.message ?? null;
 
   /** Bought units grouped by type for the army list. */
   const armyCounts = useMemo(() => {
@@ -183,10 +199,14 @@ export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirr
           <span className="deck__full"> · {remaining} left in budget</span>
         </h2>
         <div className="deck__grid">
-          <div className="deck__heading">Spells</div>
-          {spellPool.map(renderCardTile)}
-          <div className="deck__heading">Traps</div>
-          {trapPool.map(renderCardTile)}
+          {cardPools.map(({ kind, label, cards }) =>
+            cards.length === 0 ? null : (
+              <Fragment key={kind}>
+                <div className="deck__heading">{label}</div>
+                {cards.map(renderCardTile)}
+              </Fragment>
+            ),
+          )}
         </div>
         {remaining === 0 && (
           <p className="deck__hint">

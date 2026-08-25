@@ -12,7 +12,8 @@ import { rosterCost, type Roster } from '../roster';
 import type { TimeControlId } from '../ui/timeControls';
 
 export interface MatchRow {
-  readonly mode: 'classic' | 'custom';
+  /** Every game is a custom-army game; the column also holds legacy rows. */
+  readonly mode: 'custom';
   readonly time_control: string;
   readonly winner: 'white' | 'black' | 'draw' | null;
   readonly reason: string;
@@ -34,8 +35,8 @@ export interface ArmyRow {
 
 export interface MatchRowInput {
   readonly game: GameState;
-  readonly mode: 'classic' | 'custom';
-  readonly timeControl: TimeControlId;
+  /** The clock the match was played under; omitted means it had none. */
+  readonly timeControl?: TimeControlId;
   /** Match-level result when it differs from the engine's (a fallen flag). */
   readonly override?: { winner: 'white' | 'black'; reason: string } | null;
   readonly armies?: { white: Roster; black: Roster } | null;
@@ -57,8 +58,8 @@ export function buildMatchRow(input: MatchRowInput): MatchRow {
     : engineResult(input.game);
 
   return {
-    mode: input.mode,
-    time_control: input.timeControl,
+    mode: 'custom',
+    time_control: input.timeControl ?? 'unlimited',
     winner: result.winner,
     reason: result.reason,
     plies: input.game.history.length,

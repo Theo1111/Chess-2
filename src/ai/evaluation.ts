@@ -3,7 +3,7 @@
  *
  * Deliberately simple: its job is to be a stronger baseline than random, not
  * to be strong chess. Material is anchored to the pieces' actual roster costs
- * (`definition.cost`, falling back to `value`), never to classic chess
+ * (`definition.cost`, falling back to `value`), never to standard chess
  * values, so custom pieces are priced by the same numbers the balance system
  * is investigating.
  *

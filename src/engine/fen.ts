@@ -34,7 +34,11 @@ export function positionKey(state: GameState): string {
     : '';
   const effects = state.effects.length
     ? ` fx[${state.effects
-        .map((effect) => `${effect.kind}:${effect.targetPieceId}:${effect.expiresAtTurnStartOf[0]}`)
+        .map(
+          (effect) =>
+            `${effect.kind}:${effect.targetPieceId}:${effect.expiresAtTurnStartOf?.[0] ?? '-'}` +
+            (effect.turnsRemaining === undefined ? '' : `:${effect.turnsRemaining}`),
+        )
         .sort()
         .join(',')}]`
     : '';

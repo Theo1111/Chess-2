@@ -133,6 +133,8 @@ export type GameStatus =
   | 'stalemate'
   /** An Assassin reached the opponent's back row — instant win. */
   | 'assassin-victory'
+  /** A side has no royal piece left on the board at all. */
+  | 'annihilation'
   | 'draw-fifty-move'
   | 'draw-insufficient-material'
   | 'draw-threefold-repetition';
@@ -153,6 +155,12 @@ export interface SpellCast {
   readonly color: Color;
   /** Targets in selection order (piece, then destination/second piece). */
   readonly targets: readonly Square[];
+  /**
+   * A card that asks its caster to name a piece as well as a square — the
+   * Transform curse picks what its victim becomes. Cards without a
+   * `choices` list ignore this.
+   */
+  readonly choice?: PieceType;
 }
 
 export interface HistoryEntry {
@@ -220,6 +228,12 @@ export interface GameState {
   readonly traps: readonly import('./boardEffects').TrapPlacement[];
   /** Area effects (Smoke Screen, Null Field). */
   readonly regions: readonly import('./boardEffects').RegionEffect[];
+  /**
+   * Linked pairs of squares a piece may step between (the Portal terrain
+   * card). Unlike regions and statuses these do not age: terrain that was
+   * built stays built.
+   */
+  readonly portals: readonly import('./boardEffects').PortalPair[];
   /** Per-square statuses (Sacred Ground, active Dead Zone terrain). */
   readonly squareStatuses: readonly import('./boardEffects').SquareStatus[];
   /**

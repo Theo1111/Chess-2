@@ -19,7 +19,8 @@ export interface OnlineGameRow {
   readonly white_name: string;
   readonly black_name: string;
   readonly status: 'drafting' | 'active' | 'finished' | 'cancelled';
-  readonly mode: 'classic' | 'custom';
+  /** 'custom' for every game this client starts; older rows may say 'classic'. */
+  readonly mode: string;
   /** Null until that player submits during the drafting phase. */
   readonly white_army: Roster | null;
   readonly black_army: Roster | null;
@@ -30,6 +31,15 @@ export interface OnlineGameRow {
   readonly winner: Color | 'draw' | null;
   readonly reason: string | null;
   readonly time_control: string;
+  /**
+   * Milliseconds left on each clock as of `turn_started_at`, or null in an
+   * untimed game. The server is the only writer: it charges the mover on
+   * every action, so these are facts, not a client's opinion.
+   */
+  readonly white_ms: number | null;
+  readonly black_ms: number | null;
+  /** When the side to move's clock started running. */
+  readonly turn_started_at: string | null;
   readonly created_at: string;
   readonly updated_at: string;
 }
@@ -42,12 +52,12 @@ const NOT_CONFIGURED: Result = { error: CLOUD_SETUP_HINT };
 
 /**
  * Atomically pair with the oldest waiting player on the same time control,
- * or join the queue. `gameId` is null while queued.
+ * or join the queue. `gameId` is null while queued. Every match is a
+ * custom-army game, so the mode is fixed here rather than chosen.
  */
 export async function findOnlineMatch(
   timeControl: string,
   displayName: string,
-  mode: 'classic' | 'custom' = 'classic',
 ): Promise<Result & { gameId: string | null }> {
   const supabase = await getSupabase();
   if (!supabase) return { ...NOT_CONFIGURED, gameId: null };
@@ -55,7 +65,7 @@ export async function findOnlineMatch(
   const { data, error } = await supabase.rpc('find_online_match', {
     p_time_control: timeControl,
     p_display_name: displayName,
-    p_mode: mode,
+    p_mode: 'custom',
   });
   return { gameId: (data as string | null) ?? null, error: error?.message ?? null };
 }
@@ -93,23 +103,52 @@ export async function fetchOnlineGame(
 /**
  * Append one action at position `expectedPly`. The server rejects stale
  * appends ("out of date") and turn violations; callers refetch and retry.
+ *
+ * `timedOut` means the caller's flag had already fallen when the action
+ * arrived: it was not recorded and the game is now finished on time.
  */
 export async function submitOnlineAction(
   gameId: string,
   expectedPly: number,
   action: GameAction,
   nextTurn: Color,
-): Promise<Result> {
+): Promise<Result & { timedOut: boolean }> {
   const supabase = await getSupabase();
-  if (!supabase) return NOT_CONFIGURED;
+  if (!supabase) return { ...NOT_CONFIGURED, timedOut: false };
 
-  const { error } = await supabase.rpc('submit_online_action', {
+  const { data, error } = await supabase.rpc('submit_online_action', {
     p_game: gameId,
     p_expected_ply: expectedPly,
     p_action: action,
     p_next_turn: nextTurn,
   });
-  return { error: error?.message ?? null };
+  return { timedOut: data === -1, error: error?.message ?? null };
+}
+
+/**
+ * Ask the server to end a game on time. It recomputes the elapsed time from
+ * its own clock and only acts if the flag has genuinely fallen, so both
+ * clients may safely race to call it. Returns the game's status afterwards.
+ */
+export async function claimOnlineTimeout(
+  gameId: string,
+): Promise<Result & { status: string | null }> {
+  const supabase = await getSupabase();
+  if (!supabase) return { ...NOT_CONFIGURED, status: null };
+
+  const { data, error } = await supabase.rpc('claim_online_timeout', { p_game: gameId });
+  return { status: (data as string | null) ?? null, error: error?.message ?? null };
+}
+
+/** The server's own wall clock, for correcting a device with a wrong one. */
+export async function fetchServerTime(): Promise<number | null> {
+  const supabase = await getSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase.rpc('server_time');
+  if (error || typeof data !== 'string') return null;
+  const parsed = Date.parse(data);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 export async function finishOnlineGame(

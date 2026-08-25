@@ -6,6 +6,7 @@
  */
 
 export * from './types';
+export * from './availability';
 export * from './catalog';
 export * from './roster';
 export * from './validation';

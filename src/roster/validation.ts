@@ -6,10 +6,23 @@
  * `createGameFromRosters` is checked again before a board is built.
  */
 
-import { getPieceDefinition, hasPieceDefinition, squareName, type Square } from '../engine';
+import {
+  getPieceDefinition,
+  getSpellDefinition,
+  hasPieceDefinition,
+  squareName,
+  type Square,
+} from '../engine';
+import { isCardOffered, isPieceEnabled } from './availability';
 import { MANDATORY_PIECE, isDraftable } from './catalog';
 import { validateLoadout } from './loadout';
-import { isMandatory, isStartingSquare, rosterCost, startingSquares } from './roster';
+import {
+  isMandatory,
+  isStartingSquare,
+  rosterCost,
+  startingSquares,
+  throneSquare,
+} from './roster';
 import type { Roster, RosterError, RosterValidation } from './types';
 
 export interface ValidateOptions {
@@ -17,6 +30,8 @@ export interface ValidateOptions {
   readonly requirePlacement?: boolean;
   /** Also require complete 5/5 Spell and 5/5 Trap decks. */
   readonly requireLoadout?: boolean;
+  /** Also reject content an admin has switched off (a builder-time rule). */
+  readonly requireAvailable?: boolean;
 }
 
 /** Checks the army itself: legal pieces, a King, and within budget. */
@@ -93,9 +108,22 @@ export function validateComposition(roster: Roster): RosterError[] {
 export function validatePlacement(roster: Roster): RosterError[] {
   const errors: RosterError[] = [];
   const occupied = new Map<Square, string>();
+  const throne = throneSquare(roster.color);
 
   for (const unit of roster.units) {
     const square = roster.placement[unit.id];
+
+    // The one square nobody chooses: the King keeps its traditional seat,
+    // which is also the square the castling rules expect it on.
+    if (isMandatory(unit) && square !== undefined && square !== throne) {
+      errors.push({
+        code: 'king-off-throne',
+        message: `The King must stand on ${squareName(throne)}.`,
+        unitId: unit.id,
+        square,
+      });
+      continue;
+    }
     if (square === undefined) {
       errors.push({
         code: 'unplaced-unit',
@@ -139,9 +167,47 @@ export function validatePlacement(roster: Roster): RosterError[] {
   return errors;
 }
 
+/**
+ * Content an admin has taken out of circulation. Kept apart from
+ * `validateComposition` on purpose: availability is a rule about what may be
+ * DRAFTED today, not about whether an army is structurally legal, so an army
+ * saved (or a game recorded) before a piece was switched off still validates
+ * everywhere else in the app.
+ */
+export function validateAvailability(roster: Roster): RosterError[] {
+  const errors: RosterError[] = [];
+
+  const reported = new Set<string>();
+  for (const unit of roster.units) {
+    if (unit.type === MANDATORY_PIECE || isPieceEnabled(unit.type)) continue;
+    if (reported.has(unit.type)) continue;
+    reported.add(unit.type);
+    const name = hasPieceDefinition(unit.type) ? getPieceDefinition(unit.type).name : unit.type;
+    errors.push({
+      code: 'piece-unavailable',
+      message: `${name} is not available right now — remove it.`,
+      unitId: unit.id,
+    });
+  }
+
+  for (const id of [...roster.spellIds, ...roster.trapIds]) {
+    if (isCardOffered(id)) continue;
+    let name = id;
+    try {
+      name = getSpellDefinition(id).name;
+    } catch {
+      /* unknown ids are validateLoadout's problem, not this one */
+    }
+    errors.push({ code: 'card-unavailable', message: `${name} is not available right now — remove it.` });
+  }
+
+  return errors;
+}
+
 export function validateRoster(roster: Roster, options: ValidateOptions = {}): RosterValidation {
   const errors = [
     ...validateComposition(roster),
+    ...(options.requireAvailable ? validateAvailability(roster) : []),
     ...(options.requirePlacement ? validatePlacement(roster) : []),
     ...(options.requireLoadout ? validateLoadout(roster) : []),
   ];

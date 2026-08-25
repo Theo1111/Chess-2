@@ -17,6 +17,7 @@ const resultText = (match: StoredMatch): string => {
 const reasonText: Record<string, string> = {
   checkmate: 'checkmate',
   'assassin-victory': 'assassin reached the back row',
+  annihilation: 'the board was annihilated',
   stalemate: 'stalemate',
   'draw-fifty-move': 'fifty-move rule',
   'draw-threefold-repetition': 'threefold repetition',

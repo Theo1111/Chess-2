@@ -94,13 +94,18 @@ describe('shared-budget card pricing', () => {
     const noCards = autoPlace(addUnit(createRoster('white', DEFAULT_ROSTER_BUDGET), 'rook'));
     expect(validateRoster(noCards, { requirePlacement: true, requireLoadout: true }).valid).toBe(true);
 
-    // Every card in the game: also valid — 55 points cover all 17 cards.
+    // Buying cards until the budget says stop is also valid. The library has
+    // outgrown one budget (relics, curses and terrain took it past 55), so a
+    // caster build is now a real choice rather than "take everything".
+    const library = [...availableSpellCards(), ...availableTrapCards()];
     let caster = addUnit(createRoster('white', DEFAULT_ROSTER_BUDGET), 'rook');
-    for (const card of [...availableSpellCards(), ...availableTrapCards()]) {
+    for (const card of library) {
       caster = card.isTrap ? toggleTrapCard(caster, card.id) : toggleSpellCard(caster, card.id);
     }
-    expect(caster.spellIds.length).toBe(availableSpellCards().length);
-    expect(caster.trapIds.length).toBe(availableTrapCards().length);
+    const bought = caster.spellIds.length + caster.trapIds.length;
+    expect(bought).toBeGreaterThan(10);
+    expect(bought).toBeLessThan(library.length);
+    expect(rosterCost(caster)).toBeLessThanOrEqual(DEFAULT_ROSTER_BUDGET);
     expect(validateRoster(autoPlace(caster), { requirePlacement: true }).valid).toBe(true);
   });
 

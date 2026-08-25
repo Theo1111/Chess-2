@@ -24,6 +24,13 @@
   --deckcard-w: clamp(140px, 13vw, 250px);
   --deckcard-h: calc(var(--deckcard-w) * 1.5);
 
+  /* Hand cards: sized off the viewport height so both hands plus the board
+     stay on screen together. The card art is 2:3, so the width follows. */
+  --handcard-h: clamp(58px, 8.2vh, 96px);
+  --handcard-w: calc(var(--handcard-h) * 0.667);
+  --card-gold: #c9a04d;
+  --card-glow: rgba(255, 214, 120, 0.85);
+
   --piece-light: #fbfaf5;
   --piece-dark: #22262c;
   --piece-outline: #14171b;
@@ -133,8 +140,9 @@ button {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  /* Keep the whole board on screen without scrolling on typical displays. */
-  width: min(100%, calc(100vh - 210px));
+  /* Keep the whole board on screen without scrolling on typical displays —
+     the two hands at the table's edges are part of that budget. */
+  width: min(100%, calc(100vh - 210px - 2 * (var(--handcard-h) + 22px)));
   margin: 0 auto;
 }
 
@@ -872,6 +880,157 @@ button {
   text-align: left;
 }
 
+/* ----------------------------------------------------------------- admin */
+
+/* Badge in the account popover marking an admin session. */
+.account__badge {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(201, 160, 77, 0.45);
+  background: rgba(201, 160, 77, 0.12);
+  color: #e8d6aa;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.account__actions {
+  flex-wrap: wrap;
+}
+
+.admin__note {
+  margin: 0 0 16px;
+  max-width: 70ch;
+  font-size: 13px;
+  line-height: 1.55;
+  /* Sits directly on the background artwork, like the other loose text. */
+  color: #c6cede;
+  text-shadow: var(--text-shadow);
+}
+
+/* Pieces and cards side by side; one column when there is no room. */
+.admin__columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.admin__panel {
+  padding-bottom: 8px;
+}
+
+.admin__list {
+  max-height: min(62vh, 640px);
+  overflow-y: auto;
+  padding: 0 6px 6px;
+}
+
+.admin__group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 10px 8px 6px;
+  background: var(--panel-glass-strong);
+  backdrop-filter: var(--panel-blur);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.admin__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.adminrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+}
+
+.adminrow:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Switched off: still listed, visibly out of circulation. */
+.adminrow--off {
+  opacity: 0.5;
+}
+
+.adminrow--off .adminrow__name {
+  text-decoration: line-through;
+}
+
+.adminrow__icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  font-size: 16px;
+}
+
+.adminrow__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminrow__cost {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* On/off switch. */
+.switch {
+  flex: none;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.switch:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.switch--on {
+  background: rgba(110, 168, 254, 0.45);
+  border-color: var(--accent);
+}
+
+.switch__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #e8ecf3;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: transform 140ms ease;
+}
+
+.switch--on .switch__knob {
+  transform: translateX(18px);
+}
+
 /* -------------------------------------------------------- match history */
 
 .history-list {
@@ -931,13 +1090,17 @@ button {
 
 /* -------------------------------------------------------- time control */
 
-.menu__timing {
-  margin-top: 22px;
-  width: min(440px, 90vw);
+/* The clock is chosen in the online lobby: it is a rule two strangers agree
+   to, so it sits with the search that pairs them. */
+.online-lobby__timing {
+  width: 100%;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   text-align: center;
 }
 
-.menu__timing-title {
+.online-lobby__timing-title {
   margin: 0 0 10px;
   font-size: 11px;
   font-weight: 700;
@@ -946,7 +1109,7 @@ button {
   color: var(--text-muted);
 }
 
-.menu__timing-options {
+.online-lobby__timing-options {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -1456,6 +1619,20 @@ button {
   cursor: copy;
 }
 
+/* The King's seat: marked as spoken for, and not a drop target. */
+.square--throne {
+  box-shadow: inset 0 0 0 2px rgba(201, 160, 77, 0.75);
+  cursor: default;
+}
+
+.square--throne::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 214, 120, 0.28), transparent 68%);
+  pointer-events: none;
+}
+
 .square__piece--held {
   opacity: 0.45;
 }
@@ -1869,151 +2046,1129 @@ button {
   flex: none;
 }
 
-/* --------------------------------------------------------------- spells */
+/* ----------------------------------------------------------------- hands */
 
-.spellbar {
+/*
+ * Cards are played from a hand at the edge of the board, the way they are at
+ * a table: yours face up along the bottom, the opponent's face down across
+ * from you. Nothing here can turn an enemy card over — the components only
+ * ever render what `visibleOpponentSpells` already made public.
+ */
+.hand {
   position: relative;
-}
-
-.spellbar__cards {
+  /* Enlarged cards lift out of the row and over the board. */
+  z-index: 3;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 14px 6px;
+  align-items: center;
+  gap: 12px;
+  min-height: calc(var(--handcard-h) + 12px);
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel-glass);
+  backdrop-filter: var(--panel-blur);
+  box-shadow: var(--panel-shadow);
 }
 
-/* Kind label inside the one Cards panel. */
-.spellbar__group {
-  margin: 0;
-  padding: 10px 14px 0;
+.hand__owner {
+  display: grid;
+  gap: 2px;
+  min-width: 62px;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.09em;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
 }
 
-.spellbar__group + .spellbar__cards {
-  padding-top: 6px;
+.hand__count {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  opacity: 0.8;
 }
 
-/* Full card-face preview floating beside the sidebar while hovering. */
-.spellbar__preview {
-  position: absolute;
-  top: 0;
-  right: calc(100% + 14px);
-  width: min(272px, 26vw);
-  z-index: 40;
-  pointer-events: none;
-  filter: drop-shadow(0 14px 34px rgba(0, 0, 0, 0.65));
+.hand__cards {
+  display: flex;
+  align-items: flex-end;
+  flex: 1;
+  min-width: 0;
 }
 
-.spellbar__preview img {
-  width: 100%;
-  display: block;
-  border-radius: 12px;
+.hand__empty {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
-@media (max-width: 900px) {
-  .spellbar__preview {
-    display: none; /* no room to float on small screens; tiles carry the art */
-  }
-}
-
-.spellcard {
-  display: grid;
-  justify-items: center;
-  gap: 3px;
-  min-width: 66px;
-  padding: 9px 8px 7px;
-  border-radius: var(--radius-sm);
-  border: 1px solid #4a3f66;
-  background: linear-gradient(180deg, #2a2440 0%, #1d1930 100%);
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--text);
+/* One card in a hand or a spent pile. Art fills it edge to edge.
+   Cards shrink as the hand fills up rather than pushing the row wider than
+   the board it sits under — a crowded hand simply closes up. */
+.handcard {
   position: relative;
-  transition: border-color 120ms ease, transform 120ms ease;
+  flex: 0 1 var(--handcard-w);
+  min-width: 22px;
+  width: var(--handcard-w);
+  height: var(--handcard-h);
+  padding: 0;
+  border: 1px solid rgba(201, 160, 77, 0.45);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #2a2440 0%, #1d1930 100%);
+  overflow: hidden;
+  color: var(--text);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
 }
 
-.spellcard:hover:not(:disabled) {
-  border-color: #8f6fff;
-  transform: translateY(-1px);
+/* Hands overlap like cards held in one hand; the first card sits flush. */
+.handcard + .handcard {
+  margin-left: -10px;
 }
 
-.spellcard--active {
-  border-color: #b18cff;
-  box-shadow: 0 0 0 2px rgba(150, 100, 255, 0.35);
+.hand__cards .handcard {
+  z-index: calc(10 - var(--index, 0));
 }
 
-.spellcard--used {
-  filter: grayscale(1);
-  opacity: 0.45;
-  cursor: not-allowed;
+.handcard__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
 }
 
-.spellcard__icon {
-  font-size: 20px;
+/* Cards with no painted face fall back to icon and name. */
+.handcard__plain {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+}
+
+.handcard__icon {
+  font-size: calc(var(--handcard-h) * 0.3);
   line-height: 1;
 }
 
-.spellcard__name {
+.handcard__name {
+  font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1.15;
 }
 
-.spellcard__tag {
-  position: absolute;
-  top: 4px;
-  right: 5px;
-  font-size: 9px;
+/* Your own playable cards rise out of the hand when pointed at. */
+.hand--own .handcard:not(:disabled) {
+  cursor: pointer;
+}
+
+.hand--own .handcard:not(:disabled):hover,
+.hand--own .handcard:not(:disabled):focus-visible {
+  z-index: 20;
+  transform: translateY(-18px) scale(1.9);
+  transform-origin: bottom center;
+  border-color: var(--card-gold);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6), 0 0 22px rgba(255, 214, 120, 0.35);
+}
+
+.handcard--trap {
+  border-color: rgba(107, 74, 47, 0.9);
+}
+
+.handcard--armed {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(110, 168, 254, 0.55), 0 8px 20px rgba(0, 0, 0, 0.5);
+  transform: translateY(-10px);
+}
+
+/* Nothing to target right now (Last Stand with no piece in danger…). */
+.handcard--locked {
+  opacity: 0.45;
+  filter: grayscale(0.5);
+}
+
+/* Across the table: never interactive, and a shade cooler than your own. */
+.handcard--enemy {
+  cursor: default;
+  border-color: rgba(201, 160, 77, 0.28);
+}
+
+/* Spent cards: a small, dimmed pile beside the hand. */
+.hand__spent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+.handcard--spent {
+  flex: 0 1 calc(var(--handcard-w) * 0.62);
+  width: calc(var(--handcard-w) * 0.62);
+  height: calc(var(--handcard-h) * 0.62);
+  opacity: 0.5;
+  filter: grayscale(0.7);
+  box-shadow: none;
+}
+
+.hand__spent-count {
+  font-size: 10px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--text-muted);
 }
 
-.spellbar__prompt {
+/* Targeting prompt for the armed card, docked to the hand that armed it. */
+.hand__prompt {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 8px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin: 6px 14px 12px;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(150, 100, 255, 0.14);
-  border: 1px solid rgba(150, 100, 255, 0.4);
-  font-size: 12.5px;
+  border: 1px solid rgba(110, 168, 254, 0.5);
+  background: var(--panel-glass-strong);
+  backdrop-filter: var(--panel-blur);
+  font-size: 13px;
 }
 
-.spellbar__cancel {
+.hand__cancel {
   flex: none;
-  padding: 4px 10px;
+  padding: 4px 12px;
   font-size: 12px;
 }
 
-.spellbar__info {
-  margin: 4px 14px 12px;
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.45;
-}
-
-.spellbar__revealed {
-  display: grid;
-  gap: 2px;
-  margin: 4px 14px 12px;
-  padding: 8px 10px;
+/* Rules text for the card under the pointer. It floats clear of the raised
+   card itself — a hovered card grows to ~1.9x from its bottom edge. */
+.hand__info {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + var(--handcard-h) * 0.95 + 16px);
+  margin: 0;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
-  border: 1px dashed var(--border);
+  border: 1px solid var(--border);
+  background: var(--panel-glass-strong);
+  backdrop-filter: var(--panel-blur);
   font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  pointer-events: none;
 }
 
-.spellbar__revealed-title {
-  font-weight: 600;
-  font-size: 11px;
+.hand__info strong {
+  color: var(--text);
+}
+
+/* The opponent's hand hangs from the top edge, so its overlays drop below. */
+.hand--opponent .hand__prompt,
+.hand--opponent .hand__info {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+
+/* -------------------------------------------------------------- card back */
+
+.cardback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(201, 160, 77, 0.22), transparent 62%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.04) 0 5px, transparent 5px 11px),
+    linear-gradient(180deg, #2c2545 0%, #14101f 100%);
+  box-shadow: inset 0 0 0 2px rgba(201, 160, 77, 0.22);
+}
+
+.cardback__crest {
+  font-size: calc(var(--handcard-h) * 0.36);
+  line-height: 1;
+  color: rgba(233, 205, 150, 0.9);
+  text-shadow: 0 0 10px rgba(201, 160, 77, 0.6);
+}
+
+/* ------------------------------------------------------- card activation */
+
+/*
+ * The card moment. A played card slams in, holds face down for a beat, then
+ * turns over in a burst of light. Decorative only: the layer never takes
+ * pointer events and it sits below the modal layer, so a dialog is never
+ * hidden behind it.
+ */
+.activation {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.activation__glare {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 50% 46%,
+    rgba(255, 214, 120, 0.2),
+    rgba(4, 6, 10, 0.55) 46%,
+    rgba(4, 6, 10, 0.78)
+  );
+  animation: activation-glare 2.2s ease both;
+}
+
+.activation__stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+/* Spokes of light behind the card, turning slowly. */
+.activation__rays {
+  position: absolute;
+  width: 150vmin;
+  height: 150vmin;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 214, 120, 0.16) 0deg 5deg,
+    transparent 5deg 17deg
+  );
+  mask-image: radial-gradient(circle, transparent 14%, #000 34%, transparent 62%);
+  -webkit-mask-image: radial-gradient(circle, transparent 14%, #000 34%, transparent 62%);
+  opacity: 0;
+  animation: activation-rays 2.2s linear both;
+}
+
+/* The shockwave, timed to the instant the card turns face up. */
+.activation__ring {
+  position: absolute;
+  width: 34vmin;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  border: 3px solid var(--card-glow);
+  opacity: 0;
+  animation: activation-ring 900ms cubic-bezier(0.16, 0.9, 0.3, 1) 1s both;
+}
+
+.activation__card {
+  position: relative;
+  width: min(34vh, 300px);
+  aspect-ratio: 2 / 3;
+  perspective: 1400px;
+}
+
+.activation__flip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: activation-flip 2.2s cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.activation__face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--card-gold);
+  overflow: hidden;
+  /* Deliberately NOT backface-visibility: hidden — see the face keyframes
+     below. Chrome culls the wrong face while it composites the animation. */
+  box-shadow: 0 0 42px rgba(255, 214, 120, 0.45), 0 24px 60px rgba(0, 0, 0, 0.65);
+}
+
+/*
+ * The back faces the viewer first; the front waits half a turn behind it.
+ * Which one is showing is driven by opacity keyframes that swap at the exact
+ * moment the card is edge-on — not by backface culling, which Chrome gets
+ * wrong while it composites a 3D transform animation (it hid the face that
+ * was pointing AT the viewer).
+ */
+.activation__face--back {
+  animation: activation-face-out 2.2s linear both;
+}
+
+.activation__face--front {
+  transform: rotateY(180deg);
+  background: #14101f;
+  animation: activation-face-in 2.2s linear both;
+}
+
+.activation__face--front img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+.activation__plain {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  padding: 18px;
+  text-align: center;
+}
+
+.activation__icon {
+  font-size: 56px;
+  line-height: 1;
+}
+
+.activation__plain-name {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.activation .cardback__crest {
+  font-size: min(12vh, 108px);
+}
+
+.activation__banner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12%;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  text-align: center;
+  animation: activation-banner 1.1s ease 1s both;
+}
+
+.activation__kind {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
+  color: #f0d9a6;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+}
+
+.activation__name {
+  font-size: clamp(26px, 4.4vw, 48px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #fff;
+  text-shadow: 0 0 26px rgba(255, 214, 120, 0.75), 0 4px 18px rgba(0, 0, 0, 0.85);
+}
+
+/* A trap being SET never turns over: it slams down and stays face down. */
+.activation--facedown .activation__flip {
+  animation: activation-set 1.4s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+.activation--facedown .activation__face--back {
+  animation: none;
+  opacity: 1;
+}
+
+.activation--facedown .activation__face--front {
+  animation: none;
+  opacity: 0;
+}
+
+.activation--facedown .activation__glare {
+  animation-duration: 1.4s;
+}
+
+.activation--facedown .activation__rays {
+  display: none;
+}
+
+.activation--facedown .activation__ring {
+  animation: activation-ring 700ms ease 240ms both;
+  border-color: rgba(190, 150, 90, 0.55);
+}
+
+.activation--facedown .activation__banner {
+  animation: activation-banner 700ms ease 300ms both;
+}
+
+.activation--facedown .activation__name {
+  font-size: clamp(18px, 2.6vw, 28px);
+  color: #d8c69c;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.85);
+}
+
+@keyframes activation-glare {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  78% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes activation-rays {
+  0% { opacity: 0; transform: rotate(0deg) scale(0.7); }
+  40% { opacity: 0.5; }
+  70% { opacity: 0.85; }
+  100% { opacity: 0; transform: rotate(70deg) scale(1.1); }
+}
+
+@keyframes activation-ring {
+  0% { opacity: 0.95; transform: scale(0.25); border-width: 6px; }
+  100% { opacity: 0; transform: scale(2.6); border-width: 1px; }
+}
+
+/*
+ * One transform chain does the whole performance: the card flies in face
+ * down, settles, turns over at the halfway mark, holds, then pulls away.
+ */
+@keyframes activation-flip {
+  0% { opacity: 0; transform: translateY(70px) scale(0.4) rotateY(0deg) rotateZ(-14deg); }
+  10% { opacity: 1; transform: translateY(0) scale(1.08) rotateY(0deg) rotateZ(4deg); }
+  18% { transform: translateY(0) scale(1) rotateY(0deg) rotateZ(0deg); }
+  38% { transform: translateY(0) scale(1) rotateY(0deg) rotateZ(0deg); }
+  /* Edge-on at 46% — the instant the faces trade places. */
+  46% { transform: translateY(-6px) scale(1.12) rotateY(90deg) rotateZ(0deg); }
+  54% { transform: translateY(-6px) scale(1.12) rotateY(180deg) rotateZ(0deg); }
+  64% { transform: translateY(0) scale(1) rotateY(180deg) rotateZ(0deg); }
+  86% { opacity: 1; transform: translateY(0) scale(1) rotateY(180deg) rotateZ(0deg); }
+  100% { opacity: 0; transform: scale(1.3) rotateY(180deg); }
+}
+
+@keyframes activation-face-out {
+  0%, 45.9% { opacity: 1; }
+  46%, 100% { opacity: 0; }
+}
+
+@keyframes activation-face-in {
+  0%, 45.9% { opacity: 0; }
+  46%, 100% { opacity: 1; }
+}
+
+@keyframes activation-set {
+  0% { opacity: 0; transform: translateY(-90px) scale(1.5) rotateZ(-8deg); }
+  22% { opacity: 1; transform: translateY(0) scale(1) rotateZ(0deg); }
+  30% { transform: translateY(0) scale(0.96); }
+  38% { transform: translateY(0) scale(1); }
+  80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.9); }
+}
+
+@keyframes activation-banner {
+  0% { opacity: 0; transform: translateY(14px); letter-spacing: 0.4em; }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Motion is the whole point here, so the reduced-motion version keeps the
+   card and drops the choreography: it simply appears face up. */
+@media (prefers-reduced-motion: reduce) {
+  .activation__flip {
+    animation: activation-fade 1.6s ease both;
+    transform: rotateY(180deg);
+  }
+  .activation--facedown .activation__flip {
+    animation: activation-fade 1.2s ease both;
+    transform: none;
+  }
+  .activation__face--back {
+    animation: none;
+    opacity: 0;
+  }
+  .activation__face--front {
+    animation: none;
+    opacity: 1;
+  }
+  .activation--facedown .activation__face--back {
+    opacity: 1;
+  }
+  .activation__rays,
+  .activation__ring {
+    display: none;
+  }
+  .activation__banner {
+    animation: activation-fade 1.2s ease both;
+  }
+  .hand--own .handcard:not(:disabled):hover,
+  .hand--own .handcard:not(:disabled):focus-visible {
+    transform: translateY(-6px) scale(1.6);
+  }
+}
+
+@keyframes activation-fade {
+  0% { opacity: 0; }
+  14% { opacity: 1; }
+  84% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* --------------------------------------------------------------- railgun */
+
+/*
+ * Ruler's Authority. One timeline, four seconds:
+ *   0.00–1.20  charge — the board's light is dragged into the muzzle
+ *   1.20–1.35  the flash
+ *   1.35–2.20  the lance, screen shake, shockwaves
+ *   2.20–4.20  ash, and the decree
+ * Every element below is pinned to that clock, so nudging one beat means
+ * nudging its delay and nothing else.
+ */
+.railgun {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  overflow: hidden;
+  pointer-events: none;
+  animation: railgun-shake 4.2s linear both;
+}
+
+/* The world goes out. */
+.railgun__void {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(2, 4, 10, 0.72), rgba(0, 0, 0, 0.95) 70%);
+  animation: railgun-void 4.2s ease both;
+}
+
+/* Faint targeting lattice, dragged sideways as the rail spins up. */
+.railgun__grid {
+  position: absolute;
+  inset: -10%;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(120, 220, 255, 0.14) 0 1px, transparent 1px 64px),
+    repeating-linear-gradient(0deg, rgba(120, 220, 255, 0.09) 0 1px, transparent 1px 64px);
+  opacity: 0;
+  animation: railgun-grid 4.2s ease-out both;
+}
+
+/* --- charge ----------------------------------------------------------- */
+
+.railgun__charge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+}
+
+/* Sixteen motes on a circle, hauled into the centre and swallowed. */
+.railgun__spark {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: #bfe9ff;
+  box-shadow: 0 0 12px 3px rgba(120, 220, 255, 0.85);
+  transform: rotate(calc(var(--i) * (360deg / var(--n)))) translateX(46vmin);
+  animation: railgun-spark 1.25s cubic-bezier(0.55, 0, 0.9, 0.4) both;
+  animation-delay: calc(var(--i) * 18ms);
+}
+
+/* The point everything is being fed into. */
+.railgun__muzzle {
+  position: absolute;
+  width: 2vmin;
+  height: 2vmin;
+  margin: -1vmin 0 0 -1vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, #9fe4ff 40%, rgba(90, 180, 255, 0) 70%);
+  animation: railgun-muzzle 1.4s ease-in both;
+}
+
+/* Hairline aim trace, snapping into place just before the shot. */
+.railgun__aim {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(190, 240, 255, 0.9), transparent);
+  transform: scaleX(0);
+  animation: railgun-aim 1.3s ease-out both;
+}
+
+/* --- the shot --------------------------------------------------------- */
+
+.railgun__beam {
+  position: absolute;
+  top: 50%;
+  left: -10%;
+  width: 120%;
+  height: 22vmin;
+  margin-top: -11vmin;
+  transform: scaleX(0) scaleY(0.04);
+  transform-origin: left center;
+  animation: railgun-beam 3s cubic-bezier(0.1, 0.9, 0.2, 1) 1.3s both;
+}
+
+.railgun__core,
+.railgun__fringe {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.railgun__core {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(180, 240, 255, 0.75) 28%,
+    #ffffff 47%,
+    #ffffff 53%,
+    rgba(180, 240, 255, 0.75) 72%,
+    transparent 100%
+  );
+  filter: blur(2px) drop-shadow(0 0 40px rgba(140, 220, 255, 0.95));
+}
+
+/* Chromatic fringes: the same lance, split and offset. */
+.railgun__fringe {
+  mix-blend-mode: screen;
+  filter: blur(6px);
+}
+
+.railgun__fringe--cyan {
+  background: linear-gradient(180deg, transparent 20%, rgba(80, 220, 255, 0.85) 50%, transparent 80%);
+  transform: translate(-10px, -6px);
+}
+
+.railgun__fringe--magenta {
+  background: linear-gradient(180deg, transparent 20%, rgba(220, 90, 255, 0.8) 50%, transparent 80%);
+  transform: translate(12px, 7px);
+}
+
+/* Rings thrown off the impact line. */
+.railgun__shock {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20vmin;
+  height: 20vmin;
+  margin: -10vmin 0 0 -10vmin;
+  border-radius: 50%;
+  border: 3px solid rgba(190, 240, 255, 0.9);
+  opacity: 0;
+  animation: railgun-shock 1.1s cubic-bezier(0.15, 0.85, 0.3, 1) both;
+  animation-delay: calc(1.32s + var(--i) * 130ms);
+}
+
+/* The muzzle flash: brief, total. */
+.railgun__flash {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  opacity: 0;
+  animation: railgun-flash 4.2s linear both;
+}
+
+/* --- the decree ------------------------------------------------------- */
+
+.railgun__banner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  text-align: center;
+  transform: translateY(-50%);
+}
+
+.railgun__eyebrow {
+  font-size: clamp(10px, 1.4vw, 13px);
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: #9fe4ff;
+  opacity: 0;
+  animation: railgun-eyebrow 2.6s ease 1.55s both;
+}
+
+.railgun__title {
+  position: relative;
+  font-size: clamp(30px, 8vw, 108px);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #fff;
+  /* Split signal: a cyan and a magenta ghost either side of the letters. */
+  text-shadow:
+    -3px 2px 0 rgba(90, 220, 255, 0.85),
+    3px -2px 0 rgba(225, 90, 255, 0.6),
+    0 0 18px rgba(150, 230, 255, 0.95),
+    0 0 60px rgba(90, 180, 255, 0.75),
+    0 10px 40px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  animation:
+    railgun-title 2.7s cubic-bezier(0.2, 1.4, 0.3, 1) 1.45s both,
+    railgun-ghost 2.7s steps(2, end) 1.45s both;
+}
+
+.railgun__sub {
+  font-size: clamp(12px, 1.8vw, 18px);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: #dceaf7;
+  text-shadow: 0 3px 16px rgba(0, 0, 0, 0.95);
+  opacity: 0;
+  animation: railgun-eyebrow 2.4s ease 1.8s both;
+}
+
+/* --- the timeline ----------------------------------------------------- */
+
+@keyframes railgun-void {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  76% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes railgun-grid {
+  0% { opacity: 0; transform: translateX(0); }
+  22% { opacity: 0.55; }
+  32% { opacity: 0.9; transform: translateX(-40px); }
+  60% { opacity: 0.25; transform: translateX(-90px); }
+  100% { opacity: 0; transform: translateX(-120px); }
+}
+
+@keyframes railgun-spark {
+  0% { opacity: 0; transform: rotate(calc(var(--i) * (360deg / var(--n)))) translateX(46vmin) scale(0.4); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(calc(var(--i) * (360deg / var(--n)))) translateX(0) scale(1.6); }
+}
+
+@keyframes railgun-muzzle {
+  0% { opacity: 0; transform: scale(0.2); }
+  70% { opacity: 1; transform: scale(1.6); }
+  92% { opacity: 1; transform: scale(3.4); }
+  100% { opacity: 0; transform: scale(0.4); }
+}
+
+@keyframes railgun-aim {
+  0% { transform: scaleX(0); opacity: 0; }
+  60% { transform: scaleX(1); opacity: 0.35; }
+  80% { opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
+@keyframes railgun-beam {
+  0% { transform: scaleX(0) scaleY(0.03); opacity: 0; }
+  4% { transform: scaleX(1) scaleY(0.06); opacity: 1; }
+  10% { transform: scaleX(1) scaleY(1.15); }
+  16% { transform: scaleX(1) scaleY(0.85); }
+  38% { transform: scaleX(1) scaleY(0.55); opacity: 1; }
+  70% { transform: scaleX(1) scaleY(0.12); opacity: 0.8; }
+  100% { transform: scaleX(1) scaleY(0.01); opacity: 0; }
+}
+
+@keyframes railgun-shock {
+  0% { opacity: 0.9; transform: scale(0.15); border-width: 6px; }
+  100% { opacity: 0; transform: scale(6); border-width: 1px; }
+}
+
+@keyframes railgun-flash {
+  0%, 29% { opacity: 0; }
+  31% { opacity: 1; }
+  36% { opacity: 0.55; }
+  44% { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* Recoil: violent for a beat, then ringing down. */
+@keyframes railgun-shake {
+  0%, 28% { transform: translate3d(0, 0, 0); }
+  30% { transform: translate3d(-14px, 8px, 0); }
+  32% { transform: translate3d(12px, -10px, 0); }
+  34% { transform: translate3d(-9px, -6px, 0); }
+  36% { transform: translate3d(7px, 5px, 0); }
+  39% { transform: translate3d(-5px, 3px, 0); }
+  43% { transform: translate3d(3px, -2px, 0); }
+  48% { transform: translate3d(-1px, 1px, 0); }
+  55%, 100% { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes railgun-title {
+  0% { opacity: 0; transform: scale(2.4) skewX(-14deg); filter: blur(14px); }
+  8% { opacity: 1; transform: scale(1) skewX(0deg); filter: blur(0); }
+  12% { transform: scale(1.06); }
+  18% { transform: scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+
+/* The ghosts jitter for a beat, then settle a hair off true. */
+@keyframes railgun-ghost {
+  0%, 6% {
+    text-shadow:
+      -14px 6px 0 rgba(90, 220, 255, 0.9), 14px -6px 0 rgba(225, 90, 255, 0.7),
+      0 0 18px rgba(150, 230, 255, 0.95), 0 0 60px rgba(90, 180, 255, 0.75),
+      0 10px 40px rgba(0, 0, 0, 0.9);
+  }
+  10% {
+    text-shadow:
+      9px -5px 0 rgba(90, 220, 255, 0.9), -9px 5px 0 rgba(225, 90, 255, 0.7),
+      0 0 18px rgba(150, 230, 255, 0.95), 0 0 60px rgba(90, 180, 255, 0.75),
+      0 10px 40px rgba(0, 0, 0, 0.9);
+  }
+  20%, 100% {
+    text-shadow:
+      -3px 2px 0 rgba(90, 220, 255, 0.8), 3px -2px 0 rgba(225, 90, 255, 0.55),
+      0 0 18px rgba(150, 230, 255, 0.95), 0 0 60px rgba(90, 180, 255, 0.75),
+      0 10px 40px rgba(0, 0, 0, 0.9);
+  }
+}
+
+@keyframes railgun-eyebrow {
+  0% { opacity: 0; transform: translateY(10px); letter-spacing: 0.7em; }
+  14% { opacity: 1; transform: translateY(0); }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* The shot without the recoil: a flash, the lance, and the words. */
+@media (prefers-reduced-motion: reduce) {
+  .railgun,
+  .railgun__grid,
+  .railgun__spark,
+  .railgun__muzzle,
+  .railgun__aim,
+  .railgun__shock {
+    animation: none;
+  }
+  .railgun__spark,
+  .railgun__grid,
+  .railgun__shock {
+    opacity: 0;
+  }
+  .railgun__beam {
+    transform: scaleX(1) scaleY(0.3);
+    animation: railgun-quiet 4.2s ease both;
+  }
+  .railgun__title,
+  .railgun__eyebrow,
+  .railgun__sub {
+    animation: railgun-quiet 4.2s ease both;
+  }
+
+}
+
+@keyframes railgun-quiet {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ------------------------------------------------- the board's destruction */
+
+/*
+ * The other half of Ruler's Authority: the overlay fires the shot, and this
+ * is what the shot does to the board it crosses. Every timing here is an
+ * offset into the same four-second clock — the beam lands at 1.3s, and the
+ * burn sweeps left to right behind it (`--file` is set on every square).
+ */
+
+.board-frame--annihilated {
+  animation: board-hit 2.9s cubic-bezier(0.2, 0.8, 0.3, 1) 1.28s both;
+}
+
+/* The blast front: a white wall of light crossing the playfield, leaving
+   scorch behind it. */
+.board-frame--annihilated::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(12, 10, 8, 0.92) 0%,
+    rgba(20, 16, 12, 0.9) 46%,
+    rgba(255, 255, 255, 0.95) 50%,
+    rgba(160, 225, 255, 0.35) 53%,
+    transparent 58%
+  );
+  background-size: 260% 100%;
+  background-position: -160% 0;
+  opacity: 0;
+  pointer-events: none;
+  animation: board-scorch 2.9s cubic-bezier(0.3, 0.7, 0.4, 1) 1.28s both;
+}
+
+/* Each square burns as the front reaches its file. */
+.board-frame--annihilated .square--burned::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 240, 200, 0.95), rgba(90, 30, 10, 0.85) 60%, rgba(10, 8, 6, 0.9));
+  opacity: 0;
+  pointer-events: none;
+  animation: square-burn 2.6s ease-out both;
+  animation-delay: calc(1.3s + var(--file, 0) * 42ms);
+}
+
+/* Pieces caught in the beam: whited out, then blown to nothing. */
+.square__piece--vaporised {
+  animation: piece-vaporise 900ms cubic-bezier(0.3, 0, 0.7, 1) both;
+  animation-delay: calc(1.31s + var(--file, 0) * 42ms);
+}
+
+/* The one exception. The Ruler does not flinch. */
+.square--spared {
+  z-index: 6;
+}
+
+.square__piece--spared {
+  animation: piece-spared 2.9s ease-out 1.28s both;
+}
+
+/* --- the ruin layer: seams and flying masonry ------------------------- */
+
+/* Inset to the painted playfield, exactly like `.board`. Above the scorch
+   pass, which is the frame's own ::after and would otherwise bury it. */
+.board__ruin {
+  position: absolute;
+  z-index: 3;
+  top: 5.82%;
+  right: 7.58%;
+  bottom: 8.37%;
+  left: 7.89%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.board__cracks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.board__cracks path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 0.7;
+  stroke-linejoin: miter;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  filter: drop-shadow(0 0 6px rgba(160, 225, 255, 0.9));
+  animation: crack-open 2.7s cubic-bezier(0.1, 0.9, 0.2, 1) both;
+  animation-delay: calc(1.3s + var(--i) * 60ms);
+}
+
+.board__debris {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1.8vmin;
+  height: 1.4vmin;
+  margin: -0.7vmin 0 0 -0.9vmin;
+  background: linear-gradient(150deg, #e8dfc4 0%, #a49579 45%, #4a4437 100%);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  /* Fired off in every direction, then dragged down. */
+  --a: calc(var(--i) * (360deg / var(--n)));
+  animation: debris-fly 2.1s cubic-bezier(0.15, 0.75, 0.35, 1) both;
+  animation-delay: calc(1.3s + var(--i) * 9ms);
+}
+
+/* --- the timeline ----------------------------------------------------- */
+
+@keyframes board-hit {
+  0% { transform: none; filter: none; }
+  2% { transform: translate3d(0, -6px, 0) scale(1.012); filter: brightness(3.4) contrast(0.7); }
+  6% { transform: translate3d(9px, 7px, 0) rotate(0.5deg); filter: brightness(1.6); }
+  10% { transform: translate3d(-7px, 4px, 0) rotate(-0.6deg); filter: brightness(1.1); }
+  16% { transform: translate3d(4px, 8px, 0) rotate(0.35deg); }
+  26% { transform: translate3d(-2px, 10px, 0) rotate(-0.2deg); }
+  80% {
+    transform: translate3d(0, 14px, 0) rotate(0.15deg) scale(0.985);
+    filter: brightness(0.42) saturate(0.35);
+  }
+  /* The dust settles as the overlay lifts: what is left is an empty board,
+     handed back to the game without a visible cut. */
+  100% { transform: none; filter: none; }
+}
+
+@keyframes board-scorch {
+  0% { opacity: 0; background-position: -160% 0; }
+  8% { opacity: 1; }
+  58% { opacity: 1; background-position: 60% 0; }
+  80% { opacity: 1; background-position: 160% 0; }
+  100% { opacity: 0; background-position: 160% 0; }
+}
+
+@keyframes square-burn {
+  0% { opacity: 0; transform: scale(0.4); }
+  6% { opacity: 1; transform: scale(1.25); }
+  22% { opacity: 0.85; transform: scale(1); }
+  82% { opacity: 0.72; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+@keyframes piece-vaporise {
+  0% { opacity: 1; filter: none; transform: none; }
+  12% { opacity: 1; filter: brightness(8) saturate(0) drop-shadow(0 0 14px #fff); transform: scale(1.18); }
+  40% { opacity: 0.85; filter: brightness(5) saturate(0) blur(1px); transform: translateY(-8%) scale(1.05) rotate(3deg); }
+  100% { opacity: 0; filter: brightness(3) blur(7px); transform: translateY(-42%) scale(0.55) rotate(-9deg); }
+}
+
+@keyframes piece-spared {
+  0% { transform: none; filter: none; }
+  4% { transform: scale(1.14); filter: brightness(2.6) drop-shadow(0 0 16px rgba(255, 226, 150, 1)); }
+  14% { transform: scale(1); }
+  40% { filter: drop-shadow(0 0 12px rgba(255, 214, 120, 0.95)); }
+  84% { transform: scale(1.06); filter: drop-shadow(0 0 20px rgba(255, 214, 120, 0.9)) brightness(1.25); }
+  100% { transform: none; filter: none; }
+}
+
+@keyframes crack-open {
+  0% { stroke-dashoffset: 200; opacity: 0; stroke: #fff; stroke-width: 1.4; }
+  8% { opacity: 1; }
+  30% { stroke-dashoffset: 0; stroke: #fff; }
+  60% { stroke: #2a1c12; stroke-width: 0.9; filter: none; }
+  84% { stroke-dashoffset: 0; opacity: 0.9; stroke: #140d08; stroke-width: 0.9; filter: none; }
+  100% { stroke-dashoffset: 0; opacity: 0; stroke: #140d08; stroke-width: 0.9; filter: none; }
+}
+
+@keyframes debris-fly {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(0) rotate(calc(-1 * var(--a))) scale(0.5);
+  }
+  55% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(34vmin) rotate(calc(-1 * var(--a)))
+      translateY(26vmin) rotate(420deg) scale(1.1);
+  }
+}
+
+/* The board still dies, it just does not thrash about doing it. */
+@media (prefers-reduced-motion: reduce) {
+  .board-frame--annihilated,
+  .square__piece--spared {
+    animation: none;
+  }
+  .board-frame--annihilated {
+    filter: brightness(0.42) saturate(0.35);
+  }
+  .board__debris {
+    display: none;
+  }
+  .square__piece--vaporised {
+    animation: piece-gone 1.6s ease 1.3s both;
+  }
+}
+
+/* Reduced motion still loses the piece; it just does not put on a show. */
+@keyframes piece-gone {
+  0%, 55% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 /* --------------------------------------------------- card board overlays */
@@ -2088,6 +3243,72 @@ button {
   pointer-events: none;
 }
 
+/* Wall terrain: masonry, not blight — a wall is built, not cursed. */
+.square--wall {
+  background:
+    linear-gradient(180deg, rgba(120, 108, 96, 0.95), rgba(78, 70, 62, 0.95)) !important;
+  box-shadow: inset 0 0 0 1px rgba(30, 26, 22, 0.8);
+}
+
+.square--wall::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Two courses of staggered brick, drawn in mortar lines. */
+  background-image:
+    linear-gradient(rgba(40, 34, 30, 0.7) 2px, transparent 2px),
+    linear-gradient(90deg, rgba(40, 34, 30, 0.7) 2px, transparent 2px);
+  background-size: 100% 50%, 50% 50%;
+  background-position: 0 25%, 25% 0;
+  pointer-events: none;
+}
+
+/* Portal: a lit gate, and a slow swirl so the pair reads as one thing. */
+.square--portal::after {
+  content: '';
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(150, 110, 255, 0.75) 0%, rgba(90, 60, 200, 0.35) 45%, transparent 70%);
+  box-shadow: 0 0 12px rgba(150, 110, 255, 0.6), inset 0 0 10px rgba(220, 200, 255, 0.55);
+  animation: portal-swirl 6s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes portal-swirl {
+  from { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.08); }
+  to { transform: rotate(360deg) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .square--portal::after {
+    animation: none;
+  }
+}
+
+/* Badges claim a corner each so a piece can wear several at once:
+   spells top-left, freeze bottom-left, relics top-right, curses bottom-right. */
+.square__effect--relic {
+  left: auto;
+  right: 3%;
+  filter: drop-shadow(0 0 3px rgba(255, 214, 120, 0.9));
+}
+
+/* Two relics on one piece (a crowned Mirror Shield) stack downward. */
+.square__effect--relic ~ .square__effect--relic {
+  top: 26%;
+}
+
+.square__effect--curse {
+  top: auto;
+  bottom: 2%;
+  left: auto;
+  right: 3%;
+  filter: drop-shadow(0 0 3px rgba(140, 220, 120, 0.9));
+}
+
 .square__trap {
   position: absolute;
   bottom: 3%;
@@ -2112,16 +3333,6 @@ button {
   font-size: clamp(14px, 2.4vw, 24px);
   font-weight: 800;
   color: rgba(30, 34, 40, 0.55);
-}
-
-.spellcard--trap {
-  border-color: #6b4a2f;
-  background: linear-gradient(180deg, #35281c 0%, #241a12 100%);
-}
-
-.spellcard--locked {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 .banner--bonus {

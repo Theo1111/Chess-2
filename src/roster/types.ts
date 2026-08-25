@@ -43,7 +43,10 @@ export type RosterErrorCode =
   | 'square-occupied'
   | 'placement-collision'
   | 'invalid-card'
-  | 'duplicate-card';
+  | 'duplicate-card'
+  | 'piece-unavailable'
+  | 'card-unavailable'
+  | 'king-off-throne';
 
 export interface RosterError {
   readonly code: RosterErrorCode;

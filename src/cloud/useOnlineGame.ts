@@ -3,6 +3,7 @@ import type { Color } from '../engine';
 import type { GameAction } from '../ai/actions';
 import type { Roster } from '../roster';
 import {
+  claimOnlineTimeout,
   expireOnlineDraft,
   fetchOnlineGame,
   finishOnlineGame,
@@ -11,6 +12,7 @@ import {
   subscribeToOnlineGame,
   type OnlineGameRow,
 } from './online';
+import { useOnlineClock } from './useOnlineClock';
 import {
   createOnlineInitialState,
   replayOnlineActions,
@@ -18,6 +20,7 @@ import {
   replayOutcome,
 } from './onlineReplay';
 import type { AccountUser } from './auth';
+import type { GameClock } from '../ui/useGameClock';
 
 /**
  * One live online game as React state.
@@ -38,6 +41,8 @@ export interface OnlineGame {
   /** True when it is this account's turn in a live, valid game. */
   readonly canAct: boolean;
   readonly error: string | null;
+  /** Both clocks, projected from the row the server maintains. */
+  readonly clock: GameClock;
   readonly submit: (action: GameAction) => Promise<void>;
   readonly resign: () => Promise<void>;
   /** Drafting phase: seconds left, and whether this player has submitted. */
@@ -78,11 +83,10 @@ export function useOnlineGame(gameId: string, user: AccountUser | null): OnlineG
     };
   }, [gameId, refresh, acceptRow]);
 
-  // Custom games only have a position once both armies are in; until then
-  // there is nothing to replay.
+  // A game only has a position once both armies are in; until then there is
+  // nothing to replay.
   const initialState = useMemo(
-    () =>
-      row ? createOnlineInitialState(row.mode, row.white_army, row.black_army) : null,
+    () => (row ? createOnlineInitialState(row.white_army, row.black_army) : null),
     [row],
   );
 
@@ -126,6 +130,13 @@ export function useOnlineGame(gameId: string, user: AccountUser | null): OnlineG
       if (result.error) {
         setError(result.error);
         await refresh(); // stale log is the common cause — resync
+        return;
+      }
+      if (result.timedOut) {
+        // The flag had already fallen: the move was not recorded and the
+        // server ended the game. The refreshed row says the rest.
+        setError(null);
+        await refresh();
         return;
       }
       setError(null);
@@ -180,6 +191,19 @@ export function useOnlineGame(gameId: string, user: AccountUser | null): OnlineG
     [row, refresh],
   );
 
+  // --- the match clock ----------------------------------------------------
+  // Display is derived from the row; ending a game on time is the server's
+  // call, which this only ever asks for.
+  const claimTimeout = useCallback(() => {
+    if (!row || row.status !== 'active') return;
+    void claimOnlineTimeout(row.id).then((result) => {
+      if (result.error) setError(result.error);
+      void refresh();
+    });
+  }, [row, refresh]);
+
+  const clock = useOnlineClock(row, claimTimeout);
+
   const resign = useCallback(async () => {
     if (!row || myColor === null || row.status !== 'active') return;
     const winner: Color = myColor === 'white' ? 'black' : 'white';
@@ -194,6 +218,7 @@ export function useOnlineGame(gameId: string, user: AccountUser | null): OnlineG
     myColor,
     canAct,
     error,
+    clock,
     submit,
     resign,
     draftSecondsLeft,
