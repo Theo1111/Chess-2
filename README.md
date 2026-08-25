@@ -82,6 +82,35 @@ gather information. Smoke Screen and Recon prices carry the limited-fidelity
 caveat and are first in line for re-pricing. The budget rose **42 → 55** so the
 classic 5+5-style loadout (~11–20 pts of cards) still leaves a traditional army.
 
+**Batch 11** re-types the card catalog so a card's class says where its effect
+LIVES once it resolves — on nothing (**spell**), on a friendly piece (**relic**),
+on an enemy piece (**curse**), on the board (**terrain**), or hidden on the board
+awaiting an enemy (**trap**). Six cards were sitting under "spell" because that
+was the default rather than because they resolved and vanished: Shield and Last
+Stand became relics, Freeze a curse, and Smoke Screen, Null Field and Sacred
+Ground terrain. No mechanic, cost, id, name or asset changed — this pass is
+purely classification.
+
+The architectural half matters more than the table. **A kind is no longer a
+proxy for behaviour.** `filterStage` used to read "traps and terrain are not
+stopped by a Null Field", which meant re-typing a card would have silently
+granted it anti-magic immunity — so the rule now lives on the card as
+`blockedByNullField`, and the three region cards that became terrain are still
+suppressible exactly as they were, while Wall and Portal keep the bypass they
+shipped with. The same went for hidden-ness: the UI asked `isTrap` when it meant
+"does playing this conceal what it was", so cards now say `hidden` outright.
+`isTrap` survives only as the shorthand for `kind === 'trap'` that deck routing
+and the builder read, and a test pins it to exactly that.
+
+Relics and curses needed no new state: an attached effect already had two honest
+homes — `ActiveEffect` keyed to a piece id (Shield, Freeze, Mirror Shield, Crown,
+Decay) and the piece's own fields (Last Stand's extra hit point, Transform's
+type). Both live on the piece, which is the classification criterion, so nothing
+bespoke was introduced. Stored armies keep two decks (hidden vs open), not five,
+so no saved army moved a card — and `normalizeRoster` now MOVES a card that has
+been re-typed across that line instead of dropping it, should a later pass cross
+it.
+
 **Batch 10** settles where the King stands and who it may castle with. The King now
 holds its traditional seat — **e1 for White, e9 for Black** — and nothing else about
 deployment changed: every other piece still goes anywhere in the two home ranks. The

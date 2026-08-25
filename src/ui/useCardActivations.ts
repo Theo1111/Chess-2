@@ -9,9 +9,10 @@ import { getSpellDefinition, type Color, type GameState } from '../engine';
  * can only announce things the position itself already says, which is what
  * makes it safe for hidden information.
  *
- *  - `cast`    — a spell was played openly. It flips face up.
- *  - `set`     — a trap card was played. It goes face DOWN: which trap it is,
- *                and where, stays secret until it fires.
+ *  - `cast`    — a card was played openly. It flips face up.
+ *  - `set`     — a card that conceals itself was played (`hidden` on the
+ *                definition — the traps, today). It goes face DOWN: which
+ *                card it was, and where, stays secret until it fires.
  *  - `trigger` — a hidden trap became `revealed` (it fired, or a Sonar scan
  *                exposed it). Only then does the card turn over.
  */
@@ -61,11 +62,12 @@ export function cardActivationsBetween(
 
   for (const entry of next.history.slice(previous.history.length)) {
     if (!entry.cast) continue;
-    const trap = getSpellDefinition(entry.cast.spell).isTrap === true;
+    // Not "is it a trap": whether playing it hides what it was.
+    const concealed = getSpellDefinition(entry.cast.spell).hidden;
     events.push({
       id: nextId(),
-      kind: trap ? 'set' : 'cast',
-      spell: trap ? null : entry.cast.spell,
+      kind: concealed ? 'set' : 'cast',
+      spell: concealed ? null : entry.cast.spell,
       color: entry.cast.color,
       before: previous,
     });

@@ -232,9 +232,10 @@ export function CardHand({
               </span>
             ))
           ) : (
-            // A spell the opponent cast was announced when it resolved, so it
-            // lies face up. A spent TRAP card may still be armed on the board:
-            // it stays face down until the game itself reveals it.
+            // A card the opponent played openly was announced when it
+            // resolved, so it lies face up. One that conceals itself may still
+            // be armed on the board: it stays face down until the game itself
+            // reveals it. `hidden` is the card's own say-so, not its kind.
             book.used.map((id, index) => {
               const definition = getSpellDefinition(id);
               return (
@@ -242,9 +243,9 @@ export function CardHand({
                   key={`${id}-${index}`}
                   style={{ '--index': index } as CSSProperties}
                   className="handcard handcard--spent"
-                  title={definition.isTrap ? 'A card was set' : definition.name}
+                  title={definition.hidden ? 'A card was set' : definition.name}
                 >
-                  {definition.isTrap ? <CardBack /> : <CardFace definition={definition} />}
+                  {definition.hidden ? <CardBack /> : <CardFace definition={definition} />}
                 </span>
               );
             })
