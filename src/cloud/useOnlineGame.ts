@@ -78,11 +78,10 @@ export function useOnlineGame(gameId: string, user: AccountUser | null): OnlineG
     };
   }, [gameId, refresh, acceptRow]);
 
-  // Custom games only have a position once both armies are in; until then
-  // there is nothing to replay.
+  // A game only has a position once both armies are in; until then there is
+  // nothing to replay.
   const initialState = useMemo(
-    () =>
-      row ? createOnlineInitialState(row.mode, row.white_army, row.black_army) : null,
+    () => (row ? createOnlineInitialState(row.white_army, row.black_army) : null),
     [row],
   );
 

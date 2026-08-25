@@ -10,9 +10,11 @@ import { CLOUD_SETUP_HINT, getSupabase } from './supabaseClient';
 import type { ArmyRow, MatchRow } from './records';
 import type { Roster } from '../roster';
 
-export interface StoredMatch extends MatchRow {
+export interface StoredMatch extends Omit<MatchRow, 'mode'> {
   readonly id: string;
   readonly played_at: string;
+  /** Widened for reads: rows saved before custom armies became the only mode. */
+  readonly mode: string;
 }
 
 export interface StoredArmy {

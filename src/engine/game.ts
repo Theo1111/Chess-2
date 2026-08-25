@@ -116,7 +116,7 @@ const freshBook = (cards: readonly string[]) => ({
 });
 
 interface NewGameOptions {
-  /** Spell cards on or off. Classic chess turns them off. */
+  /** Spell cards on or off. The plain starting position turns them off. */
   readonly withSpells?: boolean;
   /**
    * Per-colour card decks (an army's chosen 5 spells + 5 traps). Omitted =

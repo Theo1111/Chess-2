@@ -19,7 +19,8 @@ export interface OnlineGameRow {
   readonly white_name: string;
   readonly black_name: string;
   readonly status: 'drafting' | 'active' | 'finished' | 'cancelled';
-  readonly mode: 'classic' | 'custom';
+  /** 'custom' for every game this client starts; older rows may say 'classic'. */
+  readonly mode: string;
   /** Null until that player submits during the drafting phase. */
   readonly white_army: Roster | null;
   readonly black_army: Roster | null;
@@ -42,12 +43,12 @@ const NOT_CONFIGURED: Result = { error: CLOUD_SETUP_HINT };
 
 /**
  * Atomically pair with the oldest waiting player on the same time control,
- * or join the queue. `gameId` is null while queued.
+ * or join the queue. `gameId` is null while queued. Every match is a
+ * custom-army game, so the mode is fixed here rather than chosen.
  */
 export async function findOnlineMatch(
   timeControl: string,
   displayName: string,
-  mode: 'classic' | 'custom' = 'classic',
 ): Promise<Result & { gameId: string | null }> {
   const supabase = await getSupabase();
   if (!supabase) return { ...NOT_CONFIGURED, gameId: null };
@@ -55,7 +56,7 @@ export async function findOnlineMatch(
   const { data, error } = await supabase.rpc('find_online_match', {
     p_time_control: timeControl,
     p_display_name: displayName,
-    p_mode: mode,
+    p_mode: 'custom',
   });
   return { gameId: (data as string | null) ?? null, error: error?.message ?? null };
 }

@@ -6,7 +6,9 @@ import { AccountPanel } from './AccountPanel';
 interface AccountCornerProps {
   user: AccountUser | null;
   cloudConfigured: boolean;
+  isAdmin: boolean;
   onShowHistory: () => void;
+  onOpenAdmin: () => void;
 }
 
 /**
@@ -15,7 +17,13 @@ interface AccountCornerProps {
  * the form behind a chip stops a sign-in box from competing with the menu's
  * actual choices — starting a game.
  */
-export function AccountCorner({ user, cloudConfigured, onShowHistory }: AccountCornerProps) {
+export function AccountCorner({
+  user,
+  cloudConfigured,
+  isAdmin,
+  onShowHistory,
+  onOpenAdmin,
+}: AccountCornerProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -61,9 +69,14 @@ export function AccountCorner({ user, cloudConfigured, onShowHistory }: AccountC
           <AccountPanel
             user={user}
             cloudConfigured={cloudConfigured}
+            isAdmin={isAdmin}
             onShowHistory={() => {
               setOpen(false);
               onShowHistory();
+            }}
+            onOpenAdmin={() => {
+              setOpen(false);
+              onOpenAdmin();
             }}
           />
         </div>

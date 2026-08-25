@@ -14,6 +14,7 @@ import {
   hasPieceDefinition,
 } from '../engine';
 import type { PieceClass, PieceDefinition, PieceType } from '../engine';
+import { isPieceEnabled } from './availability';
 
 /**
  * Default roster budget — ONE pool shared by pieces, spells and traps. The
@@ -46,11 +47,20 @@ export const isDraftable = (definition: PieceDefinition): boolean =>
   !definition.royal &&
   AVAILABLE_CLASSES.includes(definition.pieceClass);
 
-/** Every piece a player may currently buy, cheapest name-sorted first. */
-export function draftablePieces(): PieceDefinition[] {
+/**
+ * Every piece the game knows how to draft, cheapest name-sorted first —
+ * including any an admin has currently switched off. The Admin dashboard is
+ * the one place that wants this; everything else wants `draftablePieces`.
+ */
+export function allDraftablePieces(): PieceDefinition[] {
   return allPieceDefinitions()
     .filter(isDraftable)
     .sort((a, b) => (a.cost ?? 0) - (b.cost ?? 0) || a.name.localeCompare(b.name));
+}
+
+/** Every piece a player may currently buy, cheapest name-sorted first. */
+export function draftablePieces(): PieceDefinition[] {
+  return allDraftablePieces().filter((definition) => isPieceEnabled(definition.type));
 }
 
 export function draftablePiecesByClass(pieceClass: PieceClass): PieceDefinition[] {

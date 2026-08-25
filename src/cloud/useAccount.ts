@@ -6,6 +6,7 @@ import {
   toAccountUser,
   type AccountUser,
 } from './auth';
+import { isAdminAccount } from './content';
 
 /**
  * The signed-in user as React state: restored from the persisted session at
@@ -16,12 +17,19 @@ export interface AccountState {
   readonly user: AccountUser | null;
   readonly loading: boolean;
   readonly cloudConfigured: boolean;
+  /**
+   * True when this account holds an admin grant. It only decides whether the
+   * dashboard is offered — every write is checked again by row-level
+   * security, so faking this client-side buys nothing.
+   */
+  readonly isAdmin: boolean;
 }
 
 export function useAccount(): AccountState {
   const cloudConfigured = isCloudConfigured();
   const [user, setUser] = useState<AccountUser | null>(null);
   const [loading, setLoading] = useState(cloudConfigured);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!cloudConfigured) return;
@@ -41,5 +49,21 @@ export function useAccount(): AccountState {
     };
   }, [cloudConfigured]);
 
-  return { user, loading, cloudConfigured };
+  // Signing out (or in as somebody else) re-asks; the answer is never cached
+  // across accounts.
+  useEffect(() => {
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+    let cancelled = false;
+    void isAdminAccount(user.id).then((admin) => {
+      if (!cancelled) setIsAdmin(admin);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  return { user, loading, cloudConfigured, isAdmin };
 }

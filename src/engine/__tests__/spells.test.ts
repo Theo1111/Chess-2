@@ -54,7 +54,7 @@ describe('spell system', () => {
     }
   });
 
-  it('classic chess starts with spells disabled', () => {
+  it('the plain starting position has spells disabled', () => {
     const state = createInitialState();
     expect(state.spells.white.available).toEqual([]);
     expect(state.spells.black.available).toEqual([]);

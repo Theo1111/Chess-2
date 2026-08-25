@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { createInitialState, opposite, type GameState } from '../../engine';
+import { opposite, type GameState } from '../../engine';
 import { createGameFromRosters } from '../../roster';
 import type { AccountUser } from '../../cloud/auth';
 import { buildMatchRow } from '../../cloud/records';
@@ -7,20 +7,21 @@ import { saveMatch } from '../../cloud/storage';
 import { contentFingerprint } from '../../balance/contentFingerprint';
 import type { DraftState } from '../useAppFlow';
 import { Board } from '../components/Board';
+import { CardActivation } from '../components/CardActivation';
+import { CardHand } from '../components/CardHand';
 import { CapturedPieces } from '../components/CapturedPieces';
 import { ClockPanel } from '../components/ClockPanel';
 import { GameControls } from '../components/GameControls';
 import { MoveChoiceDialog } from '../components/MoveChoiceDialog';
 import { MoveHistory } from '../components/MoveHistory';
 import { PieceInfo } from '../components/PieceInfo';
-import { SpellBar } from '../components/SpellBar';
 import { StatusPanel, describeStatus } from '../components/StatusPanel';
 import { getTimeControl, type TimeControlId } from '../timeControls';
+import { useCardActivations } from '../useCardActivations';
 import { useChessGame } from '../useChessGame';
 import { useGameClock } from '../useGameClock';
 
 interface GameScreenProps {
-  mode: 'classic' | 'custom';
   draft: DraftState;
   timeControl: TimeControlId;
   /** Signed-in player, or null — games are only synced when signed in. */
@@ -28,11 +29,10 @@ interface GameScreenProps {
   onExit: () => void;
 }
 
-export function GameScreen({ mode, draft, timeControl, user, onExit }: GameScreenProps) {
+export function GameScreen({ draft, timeControl, user, onExit }: GameScreenProps) {
   const createGame = useCallback(
-    (): GameState =>
-      mode === 'custom' ? createGameFromRosters(draft.white, draft.black) : createInitialState(),
-    [mode, draft],
+    (): GameState => createGameFromRosters(draft.white, draft.black),
+    [draft],
   );
 
   // The clock reads the game and the board reads the clock, so the lock is
@@ -58,18 +58,17 @@ export function GameScreen({ mode, draft, timeControl, user, onExit }: GameScree
     syncedRef.current = true;
     const row = buildMatchRow({
       game,
-      mode,
       timeControl,
       override: clock.flagged
         ? { winner: opposite(clock.flagged), reason: 'timeout' }
         : null,
-      armies: mode === 'custom' ? { white: draft.white, black: draft.black } : null,
+      armies: { white: draft.white, black: draft.black },
       contentFingerprint: contentFingerprint(),
     });
     void saveMatch(user.id, row).then((result) => {
       if (result.error) console.warn('match sync failed:', result.error);
     });
-  }, [gameOver, user, game, mode, timeControl, clock.flagged, draft]);
+  }, [gameOver, user, game, timeControl, clock.flagged, draft]);
 
   const newGame = useCallback(() => {
     controller.newGame();
@@ -85,6 +84,8 @@ export function GameScreen({ mode, draft, timeControl, user, onExit }: GameScree
       }
     : describeStatus(game);
 
+  const activation = useCardActivations(game);
+
   const selectedMoves = [...controller.movesBySquare.values()].flat();
   const selectedCaptures = selectedMoves.filter((move) => move.captured).length;
 
@@ -96,7 +97,7 @@ export function GameScreen({ mode, draft, timeControl, user, onExit }: GameScree
             Chess<span className="app__title-mark">2</span>
           </h1>
           <p className="app__tagline">
-            {mode === 'custom' ? 'Custom armies' : 'Classic chess'} — two players, one board
+            Custom armies — two players, one board
             {clock.enabled && ` · ${getTimeControl(timeControl).label} each`}
           </p>
         </div>
@@ -107,9 +108,21 @@ export function GameScreen({ mode, draft, timeControl, user, onExit }: GameScree
 
       <main className="layout">
         <div className="layout__board">
+          {/* Hot seat: the player to move is the one sitting at this side of
+              the table, so their hand is the open one at the bottom. */}
+          <CardHand game={game} color={opposite(game.turn)} side="opponent" />
           <CapturedPieces game={game} color="black" />
           <Board controller={controller} />
           <CapturedPieces game={game} color="white" />
+          <CardHand
+            game={game}
+            color={game.turn}
+            side="own"
+            casting={controller.casting}
+            onSelect={controller.selectSpell}
+            onCancel={controller.cancelSpell}
+            playable={!gameOver}
+          />
         </div>
 
         <aside className="layout__sidebar">
@@ -136,12 +149,6 @@ export function GameScreen({ mode, draft, timeControl, user, onExit }: GameScree
               <span>{status.detail}</span>
             </div>
           )}
-          <SpellBar
-            game={game}
-            casting={controller.casting}
-            onSelect={controller.selectSpell}
-            onCancel={controller.cancelSpell}
-          />
           <PieceInfo
             game={game}
             selected={controller.selected}
@@ -156,6 +163,8 @@ export function GameScreen({ mode, draft, timeControl, user, onExit }: GameScree
           <MoveHistory history={game.history} />
         </aside>
       </main>
+
+      <CardActivation activation={activation} />
 
       {pendingChoice && (
         <MoveChoiceDialog

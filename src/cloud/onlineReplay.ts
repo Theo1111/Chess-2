@@ -3,7 +3,7 @@
  * the trust model.
  *
  * The server stores actions but never runs the engine, so EVERY client
- * replays the log from the fixed classic start and validates each action
+ * replays the log from the agreed starting position and validates each action
  * against `generateLegalActions` before applying it. A log that contains an
  * illegal action (a modified client, or a divergent engine version) is
  * reported as invalid at its exact index instead of being trusted — the game
@@ -33,19 +33,16 @@ export interface ReplayResult {
 }
 
 /**
- * The starting position for an online game. Classic mode is the fixed
- * standard opening; custom mode is built from the two submitted armies, so
- * both clients derive an identical board from the same stored rosters.
- * Returns null if a custom game's armies are missing or fail roster
+ * The starting position for an online game: built from the two submitted
+ * armies, so both clients derive an identical board from the same stored
+ * rosters. Returns null while the armies are missing or if they fail roster
  * validation — the caller shows that as an unplayable game rather than
  * guessing at a position.
  */
 export function createOnlineInitialState(
-  mode: 'classic' | 'custom' = 'classic',
   white?: Roster | null,
   black?: Roster | null,
 ): GameState | null {
-  if (mode === 'classic') return createInitialState();
   if (!white || !black) return null;
   try {
     return createGameFromRosters(white, black);
