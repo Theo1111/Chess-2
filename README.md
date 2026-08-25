@@ -530,8 +530,39 @@ Setup:
 
 4. Restart the dev server. The menu's Account panel switches from a setup hint
    to sign-in / create-account.
-5. Optional: run [`supabase/admin.sql`](supabase/admin.sql) to enable admin
+5. Run [`supabase/online.sql`](supabase/online.sql),
+   [`supabase/online-custom.sql`](supabase/online-custom.sql) and
+   [`supabase/online-clock.sql`](supabase/online-clock.sql) for online play,
+   drafting and the match clock.
+6. Optional: run [`supabase/admin.sql`](supabase/admin.sql) to enable admin
    accounts and the content config (below).
+
+### The online clock
+
+Time controls belong to online play: the picker lives in the online lobby,
+because a clock is a rule two strangers agree to before a game — two players
+sharing a screen also share a wall clock, so a local hot-seat match is untimed.
+Players are paired on the control they picked.
+
+The clock is kept **by the server** ([online-clock.sql](supabase/online-clock.sql)),
+for the same reason the drafting deadline is: a paused tab, a throttled timer
+or a tampered client must never buy a player extra time. Each side's remaining
+milliseconds live on the game row and are charged from `now() - turn_started_at`
+every time an action is appended; White's clock starts the moment both armies
+are in. A bonus phase that keeps the same player on turn keeps charging them,
+which is correct. An action that arrives after its sender's flag has fallen is
+**not recorded** — the game is finished on time instead (reported as `-1`
+rather than by raising, which would roll the finish back with it).
+
+Losing on time is therefore never a client's verdict. Either player may ask
+(`claim_online_timeout`) and the server recomputes the elapsed time itself, so
+an early or forged claim simply answers "active" and both clients can safely
+race to call it. On the client the countdown is a pure projection of the row
+([onlineClock.ts](src/cloud/onlineClock.ts), unit-tested), rendered by the same
+`ClockPanel` local games used to use; `useOnlineClock` only redraws it and asks
+for the flag. Because the row's stamps are the server's, the hook measures its
+own device's offset once through `server_time()` — a laptop with a wrong system
+clock still shows the true countdown.
 
 ### Admins & the content config
 
@@ -581,8 +612,8 @@ on game end — a failed sync logs a warning and never touches gameplay.
 
 ## Known limitations
 
-- Local hot-seat only: no undo, no clocks, no board flip, no saved games, no AI — all
-  deliberately out of scope so far.
+- Local hot-seat games are untimed and have no undo, no saved games and no AI — all
+  deliberately out of scope so far. The clock is an online feature (above).
 - Both players draft on one screen in sequence, so White can see Black's roster being
   built (and vice versa). Hidden drafting needs the future online/multi-screen layer.
 - Castling is disabled in custom-army games (a drafted army has no home-square rooks);
@@ -595,7 +626,7 @@ on game end — a failed sync logs a warning and never touches gameplay.
   squares (sliders, double pushes, Diplomat and Ram leaps); L-shaped leaps and
   teleports (Squire jump, Royal Swap) expose nothing.
 - Draws by threefold repetition and the fifty-move rule are applied automatically rather
-  than being claimable, and there is no draw-offer or resign flow.
+  than being claimable, and there is no draw-offer flow (online games can resign).
 - Insufficient-material detection covers the standard cases (K vs K, K+minor vs K, and
   same-coloured bishops); with an unrecognised custom piece on the board it conservatively
   reports "sufficient".

@@ -6,7 +6,6 @@ import {
   mirrorRoster,
   type Roster,
 } from '../roster';
-import { DEFAULT_TIME_CONTROL, type TimeControlId } from './timeControls';
 
 /**
  * Top-level app flow:
@@ -39,8 +38,6 @@ const freshDraft = (): DraftState => ({
 export function useAppFlow() {
   const [screen, setScreen] = useState<AppScreen>({ kind: 'menu' });
   const [draft, setDraft] = useState<DraftState>(freshDraft);
-  /** Chosen on the menu, applied to whichever game is started next. */
-  const [timeControl, setTimeControl] = useState<TimeControlId>(DEFAULT_TIME_CONTROL);
 
   const updateRoster = useCallback((color: Color, roster: Roster) => {
     setDraft((current) => ({ ...current, [color]: roster }));
@@ -78,8 +75,6 @@ export function useAppFlow() {
   return {
     screen,
     draft,
-    timeControl,
-    setTimeControl,
     updateRoster,
     startDraft,
     toPlacement,

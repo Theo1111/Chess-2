@@ -35,7 +35,8 @@ export interface ArmyRow {
 
 export interface MatchRowInput {
   readonly game: GameState;
-  readonly timeControl: TimeControlId;
+  /** The clock the match was played under; omitted means it had none. */
+  readonly timeControl?: TimeControlId;
   /** Match-level result when it differs from the engine's (a fallen flag). */
   readonly override?: { winner: 'white' | 'black'; reason: string } | null;
   readonly armies?: { white: Roster; black: Roster } | null;
@@ -58,7 +59,7 @@ export function buildMatchRow(input: MatchRowInput): MatchRow {
 
   return {
     mode: 'custom',
-    time_control: input.timeControl,
+    time_control: input.timeControl ?? 'unlimited',
     winner: result.winner,
     reason: result.reason,
     plies: input.game.history.length,

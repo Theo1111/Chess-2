@@ -1090,13 +1090,17 @@ button {
 
 /* -------------------------------------------------------- time control */
 
-.menu__timing {
-  margin-top: 22px;
-  width: min(440px, 90vw);
+/* The clock is chosen in the online lobby: it is a rule two strangers agree
+   to, so it sits with the search that pairs them. */
+.online-lobby__timing {
+  width: 100%;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   text-align: center;
 }
 
-.menu__timing-title {
+.online-lobby__timing-title {
   margin: 0 0 10px;
   font-size: 11px;
   font-weight: 700;
@@ -1105,7 +1109,7 @@ button {
   color: var(--text-muted);
 }
 
-.menu__timing-options {
+.online-lobby__timing-options {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

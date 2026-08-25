@@ -8,11 +8,17 @@ import {
 } from '../../cloud/online';
 import { useOnlineGame } from '../../cloud/useOnlineGame';
 import { useOnlineController } from '../../cloud/useOnlineController';
-import { getTimeControl, type TimeControlId } from '../timeControls';
+import {
+  DEFAULT_TIME_CONTROL,
+  TIME_CONTROLS,
+  getTimeControl,
+  type TimeControlId,
+} from '../timeControls';
 import { Board } from '../components/Board';
 import { CardActivation } from '../components/CardActivation';
 import { CardHand } from '../components/CardHand';
 import { CapturedPieces } from '../components/CapturedPieces';
+import { ClockPanel } from '../components/ClockPanel';
 import { MoveChoiceDialog } from '../components/MoveChoiceDialog';
 import { MoveHistory } from '../components/MoveHistory';
 import { useCardActivations } from '../useCardActivations';
@@ -20,22 +26,26 @@ import { OnlineDraft } from './OnlineDraft';
 
 interface OnlineScreenProps {
   user: AccountUser;
-  timeControl: TimeControlId;
   onExit: () => void;
 }
 
 /**
  * Online play: find an opponent, then play the shared game.
  *
- * Every match is a custom-army game: players are paired on their time-control
- * choice, then each drafts an army before the board appears. While queued we
- * poll `my_active_online_game` — the moment someone else's `find_online_match`
- * pairs us, the game id appears and both screens flip to the board.
+ * Every match is a custom-army game: players choose a time control, are
+ * paired with someone who chose the same one, then each drafts an army
+ * before the board appears. While queued we poll `my_active_online_game` —
+ * the moment someone else's `find_online_match` pairs us, the game id
+ * appears and both screens flip to the board.
+ *
+ * The clock lives here rather than on the menu because it is a rule two
+ * strangers agree to; a hot-seat game shares a room and a wall clock.
  */
-export function OnlineScreen({ user, timeControl, onExit }: OnlineScreenProps) {
+export function OnlineScreen({ user, onExit }: OnlineScreenProps) {
   const [gameId, setGameId] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);
   const [lobbyError, setLobbyError] = useState<string | null>(null);
+  const [timeControl, setTimeControl] = useState<TimeControlId>(DEFAULT_TIME_CONTROL);
 
   const enterQueue = useCallback(async () => {
     setLobbyError(null);
@@ -107,10 +117,33 @@ export function OnlineScreen({ user, timeControl, onExit }: OnlineScreenProps) {
           ) : (
             <>
               <p className="online-lobby__status">Play a ranked-free game against a real opponent.</p>
+
+              <section className="online-lobby__timing" aria-label="Time control">
+                <h2 className="online-lobby__timing-title">Time per player</h2>
+                <div
+                  className="online-lobby__timing-options"
+                  role="radiogroup"
+                  aria-label="Time per player"
+                >
+                  {TIME_CONTROLS.map((control) => (
+                    <button
+                      key={control.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={timeControl === control.id}
+                      className={`timechip${timeControl === control.id ? ' timechip--active' : ''}`}
+                      onClick={() => setTimeControl(control.id)}
+                    >
+                      {control.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
               <p className="online-lobby__hint">
                 Signed in as <strong>{user.displayName}</strong>. You are matched with the next
-                player searching on this time control, then you each get 60 seconds to draft an
-                army.
+                player searching on the same time control, then you each get 60 seconds to
+                draft an army.
               </p>
               <button type="button" className="button button--primary" onClick={() => void enterQueue()}>
                 Find opponent
@@ -144,6 +177,7 @@ function OnlineGameView({
     submit,
     resign,
     error,
+    clock,
     draftSecondsLeft,
     armySubmitted,
     submitArmy,
@@ -216,7 +250,9 @@ function OnlineGameView({
     : finished
       ? row.winner === 'draw'
         ? 'Draw'
-        : `${row.winner === 'white' ? row.white_name : row.black_name} wins`
+        : `${row.winner === 'white' ? row.white_name : row.black_name} wins${
+            row.reason === 'timeout' ? ' on time' : ''
+          }`
       : canAct
         ? 'Your move'
         : `Waiting for ${opponentName}…`;
@@ -236,6 +272,7 @@ function OnlineGameView({
           </h1>
           <p className="app__tagline">
             Online — {row.white_name} vs {row.black_name}
+            {clock.enabled && ` · ${getTimeControl(row.time_control as TimeControlId).label} each`}
           </p>
         </div>
         <button type="button" className="button button--ghost" onClick={onExit}>
@@ -263,6 +300,7 @@ function OnlineGameView({
         </div>
 
         <aside className="layout__sidebar">
+          <ClockPanel clock={clock} turn={replay.state.turn} gameOver={finished || desynced} />
           <div className={`panel status${canAct ? ' status--your-turn' : ''}`}>
             <strong>{headline}</strong>
             <span>{detail}</span>

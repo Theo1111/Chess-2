@@ -24,8 +24,6 @@ export default function App() {
     <MainMenu
       onDraft={flow.startDraft}
       onOnline={flow.toOnline}
-      timeControl={flow.timeControl}
-      onTimeControl={flow.setTimeControl}
       account={account}
       onShowHistory={flow.toHistory}
       onOpenAdmin={flow.toAdmin}
@@ -63,12 +61,7 @@ export default function App() {
 
     case 'game':
       return (
-        <GameScreen
-          draft={draft}
-          timeControl={flow.timeControl}
-          user={account.user}
-          onExit={flow.toMenu}
-        />
+        <GameScreen draft={draft} user={account.user} onExit={flow.toMenu} />
       );
 
     case 'history':
@@ -88,7 +81,7 @@ export default function App() {
       // Online play requires a signed-in account; signing out mid-screen
       // falls back to the menu rather than stranding a headless lobby.
       return account.user ? (
-        <OnlineScreen user={account.user} timeControl={flow.timeControl} onExit={flow.toMenu} />
+        <OnlineScreen user={account.user} onExit={flow.toMenu} />
       ) : (
         menu
       );
