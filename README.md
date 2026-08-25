@@ -634,6 +634,32 @@ and whether it is an admin — to React. Nothing in
 `src/engine` or `src/balance` imports any of it. Match saves are fire-and-forget
 on game end — a failed sync logs a warning and never touches gameplay.
 
+**And one secret card.** *Ruler's Authority* (0 pts) annihilates every piece on
+the board but the caster's King — and every trap, ward, wall and gate with them.
+It is a joke card and deliberately a broken one: the turn it is played is the
+turn the game ends. It carries `secret: true`, so the Army Builder only offers it
+under a 🔒 heading to an admin account, and it is not dealt into the standard
+card set — it can only reach a game through a drafted army. Playing it does not
+flip a card: it fires a railgun
+([RailgunStrike.tsx](src/ui/components/RailgunStrike.tsx)) — the board's light is
+dragged into the muzzle, the screen whites out, a lance crosses the world with
+chromatic fringes and shockwaves, and the decree lands. Four seconds of CSS
+keyframes over a dozen divs; no assets, and a plain flash under
+`prefers-reduced-motion`.
+
+Because a King can now leave the board, `GameStatus` gained `annihilation`: a
+side with no royal piece has lost, whatever the rest of the position says.
+Ordinary chess can never reach that; a card can.
+
+**The secret is hidden on the client and enforced on the server.**
+`availability.ts` holds a `secretsUnlocked` flag set from the signed-in account's
+admin grant, which keeps the card out of the catalog, out of `toggleSpellCard`
+and out of a valid roster. That is a courtesy, not a boundary — a modified client
+could still build one. What actually stops it in an ONLINE game is
+`submit_online_army` in [admin.sql](supabase/admin.sql), which refuses a roster
+containing a secret card from anyone without a grant. A local hot-seat game has
+no server in the loop and so cannot be gated at all.
+
 ### How the new classes plug in
 
 Nothing about them is special-cased outside their own definitions:
@@ -685,3 +711,7 @@ Nothing about them is special-cased outside their own definitions:
 - A Transform can create a piece neither army drafted, and the resulting type is
   not checked against the admin content config — availability gates drafting, not
   what a card may conjure mid-game.
+- The secret card's client-side hiding is a courtesy; only online army submission
+  is enforced server-side (see above). It is also unpriced by design: at 0 points
+  it is a joke, not a balance decision, and the balance laboratory does not draft
+  secret cards.

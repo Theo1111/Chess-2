@@ -3,11 +3,13 @@ import '../../engine/customPieces';
 import '../../engine/rookPieces';
 import '../../engine/knightPieces';
 import '../../engine/bishopPieces';
-import { resetContentFlags, setContentFlags } from '../availability';
+import { resetContentFlags, setContentFlags, setSecretsUnlocked } from '../availability';
 import { allDraftablePieces, draftablePieces } from '../catalog';
 import {
   allSpellCards,
   allTrapCards,
+  availableCardsOfKind,
+  availableSecretCards,
   availableSpellCards,
   availableTrapCards,
   toggleSpellCard,
@@ -17,15 +19,35 @@ import { addUnit, createRoster } from '../roster';
 import { validateAvailability, validateComposition } from '../validation';
 import { DEFAULT_ROSTER_BUDGET } from '../catalog';
 
-afterEach(() => resetContentFlags());
+afterEach(() => {
+  resetContentFlags();
+  setSecretsUnlocked(false);
+});
 
 const army = () => createRoster('white', DEFAULT_ROSTER_BUDGET);
 
 describe('content availability', () => {
-  it('offers everything by default', () => {
+  it('offers the whole public catalog by default', () => {
     expect(draftablePieces()).toEqual(allDraftablePieces());
-    expect(availableSpellCards()).toEqual(allSpellCards());
     expect(availableTrapCards()).toEqual(allTrapCards());
+    // …everything except the secrets, which stay locked.
+    const secrets = allSpellCards().filter((card) => card.secret);
+    expect(secrets.length).toBeGreaterThan(0);
+    expect(availableSpellCards()).toEqual(allSpellCards().filter((card) => !card.secret));
+  });
+
+  it('keeps secret cards out of the draft until they are unlocked', () => {
+    expect(availableSecretCards()).toEqual([]);
+    expect(availableCardsOfKind('spell').some((card) => card.id === 'rulers-authority')).toBe(false);
+    expect(toggleSpellCard(army(), 'rulers-authority').spellIds).toEqual([]);
+    expect(validateAvailability({ ...army(), spellIds: ['rulers-authority'] })).toHaveLength(1);
+
+    setSecretsUnlocked(true);
+    expect(availableSecretCards().map((card) => card.id)).toEqual(['rulers-authority']);
+    // Still shown apart from the ordinary spells, never mixed in.
+    expect(availableCardsOfKind('spell').some((card) => card.id === 'rulers-authority')).toBe(false);
+    expect(toggleSpellCard(army(), 'rulers-authority').spellIds).toEqual(['rulers-authority']);
+    expect(validateAvailability({ ...army(), spellIds: ['rulers-authority'] })).toEqual([]);
   });
 
   it('takes switched-off content out of the catalog', () => {

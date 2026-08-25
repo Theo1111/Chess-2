@@ -35,7 +35,7 @@ import { beginTurn, hasEffect, pruneEffects } from './effects';
 import type { ActiveEffect } from './effects';
 import { isImmobilized } from './auras';
 import { settle } from './game';
-import { isRoyalAttacked } from './moveGeneration';
+import { isRoyalAttacked, royalSquares } from './moveGeneration';
 import { toFen } from './fen';
 import { changeType } from './apply';
 import { allPieceDefinitions, getPieceDefinition } from './pieces';
@@ -128,6 +128,12 @@ export interface SpellDefinition {
   readonly isTrap?: boolean;
   /** Which selection stages point at pieces (Sacred Ground immunity applies). */
   readonly pieceStages?: readonly (0 | 1)[];
+  /**
+   * A card that is not in the public catalog. The draft only offers it to
+   * clients that have unlocked secrets (admin accounts); the engine plays it
+   * like any other card, because the engine does not know what an account is.
+   */
+  readonly secret?: boolean;
   /**
    * Full card-face artwork (a public asset path). Cards without art fall
    * back to their icon-and-text presentation.
@@ -940,6 +946,59 @@ registerSpell({
   },
   describe: (targets, choice) =>
     `Transform→${squareName(targets[0]!)}=${choice ? getPieceDefinition(choice).name : '?'}`,
+});
+
+
+/* ------------------------------------------------------------------ */
+/* The secret card                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Ruler's Authority — a joke card, and deliberately a broken one.
+ *
+ * It is `secret`, so the Army Builder only offers it to an admin account
+ * (see `roster/availability.ts`, and the server-side gate on submitting an
+ * online army in `supabase/admin.sql`). The engine treats it as an ordinary
+ * untargeted card: one side ends the turn with a King and nothing else, which
+ * `computeStatus` reads as an annihilation.
+ */
+registerSpell({
+  id: 'rulers-authority',
+  name: "Ruler's Authority",
+  icon: '⚡',
+  kind: 'spell',
+  secret: true,
+  cost: 0,
+  description:
+    'The Ruler speaks once. Every piece on the board is annihilated but your King — and every trap, ward, wall and gate with them. Nothing is left to argue with.',
+  targeting: 'none',
+  // The Ruler must be alive to give the order.
+  castable: (state, caster) => royalSquares(state.board, caster).length > 0,
+  resolve: (state, caster) => {
+    const board = state.board.slice();
+    let reserves = state.reserves;
+
+    for (let square = 0; square < BOARD_SIZE; square++) {
+      const piece = board[square];
+      if (!piece) continue;
+      // The one exception, and the whole joke.
+      if (piece.color === caster && getPieceDefinition(piece.type).royal) continue;
+      board[square] = null;
+      // Destruction, not capture: nothing is credited to anyone.
+      reserves = { ...reserves, [piece.color]: [...reserves[piece.color], piece.type] };
+    }
+
+    return {
+      board,
+      reserves,
+      effects: [],
+      traps: [],
+      regions: [],
+      squareStatuses: [],
+      portals: [],
+    };
+  },
+  describe: () => "Ruler's Authority",
 });
 
 /* ------------------------------------------------------------------ */

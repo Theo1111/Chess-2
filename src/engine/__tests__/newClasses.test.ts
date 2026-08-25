@@ -43,6 +43,21 @@ const tryCast = (state: GameState, color: Color, spell: string, names: string[],
     ...(choice === undefined ? {} : { choice }),
   });
 
+/**
+ * The secret card is not in any starting book — it only reaches a game
+ * through a drafted army — so a test that wants to play it deals it in.
+ */
+const dealSecret = (state: GameState, color: Color): GameState => ({
+  ...state,
+  spells: {
+    ...state.spells,
+    [color]: {
+      ...state.spells[color],
+      available: [...state.spells[color].available, 'rulers-authority'],
+    },
+  },
+});
+
 const play = (state: GameState, from: string, to: string): GameState => {
   const move = findLegalMove(state, sq(from), sq(to));
   expect(move, `expected ${from}${to} to be legal`).not.toBeNull();
@@ -234,6 +249,54 @@ describe('Transform', () => {
   it('a card that takes no choice must not be handed one', () => {
     const state = createStateFromFen('9/k8/9/9/9/9/9/9/K2R5 w - - 0 1');
     expect(tryCast(state, 'white', 'shield', ['d1'], 'rook')).toBeNull();
+  });
+});
+
+describe("Ruler's Authority", () => {
+  it('clears the board of everything but the caster’s King, and ends the game', () => {
+    const start = dealSecret(createStateFromFen('5k3/8q/3r5/9/9/9/1P7/9/K3R3B w - - 0 1'), 'white');
+    const decree = cast(start, 'white', 'rulers-authority', []);
+
+    const survivors = decree.board.filter((piece) => piece !== null);
+    expect(survivors).toHaveLength(1);
+    expect(survivors[0]).toMatchObject({ type: 'king', color: 'white' });
+
+    expect(decree.status).toBe('annihilation');
+    expect(decree.winner).toBe('white');
+    // Destruction, not capture: nothing is credited, everything is mourned.
+    expect(decree.captured).toEqual({ white: [], black: [] });
+    expect([...decree.reserves.white].sort()).toEqual(['bishop', 'pawn', 'rook']);
+    expect([...decree.reserves.black].sort()).toEqual(['king', 'queen', 'rook']);
+  });
+
+  it('sweeps the board’s own furniture away with the pieces', () => {
+    let state = dealSecret(createStateFromFen('5k3/9/8r/9/9/9/P8/1N7/K3R3Q w - - 0 1'), 'white');
+    state = cast(state, 'white', 'portal', ['c6', 'g6']);
+    state = cast(state, 'black', 'decay', ['b2']);
+    // Late enough that the wall is still standing when the decree lands.
+    state = cast(state, 'white', 'wall', ['d5', 'e5']);
+    state = play(state, 'i7', 'i6');
+    expect(state.squareStatuses.length).toBeGreaterThan(0);
+    expect(state.portals).toHaveLength(1);
+
+    const decree = cast(state, 'white', 'rulers-authority', []);
+    expect(decree.squareStatuses).toEqual([]);
+    expect(decree.portals).toEqual([]);
+    expect(decree.effects).toEqual([]);
+    expect(decree.traps).toEqual([]);
+  });
+
+  it('is not in the standard card set — it only arrives in a drafted army', () => {
+    const state = createStateFromFen();
+    expect(state.spells.white.available).not.toContain('rulers-authority');
+    expect(getSpellDefinition('rulers-authority').secret).toBe(true);
+    expect(getSpellDefinition('shield').secret).toBeUndefined();
+  });
+
+  it('needs a living Ruler to give the order', () => {
+    // A board where white has no royal piece at all.
+    const state = createStateFromFen('5k3/9/9/9/9/9/9/9/4R4 w - - 0 1');
+    expect(getSpellDefinition('rulers-authority').castable!(state, 'white')).toBe(false);
   });
 });
 

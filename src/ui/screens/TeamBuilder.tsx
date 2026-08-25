@@ -7,6 +7,7 @@ import {
   CLASS_LABELS,
   addUnit,
   availableCardsOfKind,
+  availableSecretCards,
   canAfford,
   canAffordCard,
   cardCost,
@@ -49,7 +50,11 @@ export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirr
   // memoised against a dependency the linter cannot see.
   useContentFlags();
   const catalog = draftablePieces();
-  const cardPools = CARD_KINDS.map((kind) => ({ kind, cards: availableCardsOfKind(kind) }));
+  const cardPools = [
+    ...CARD_KINDS.map((kind) => ({ kind, label: CARD_KIND_LABELS[kind], cards: availableCardsOfKind(kind) })),
+    // Empty for everyone but an admin, and therefore invisible to everyone else.
+    { kind: 'secret', label: '🔒 Secret', cards: availableSecretCards() },
+  ];
   const [inspected, setInspected] = useState<PieceType>(catalog[0]?.type ?? 'queen');
   const [tab, setTab] = useState<BuilderTab>('pieces');
   /**
@@ -194,10 +199,10 @@ export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirr
           <span className="deck__full"> · {remaining} left in budget</span>
         </h2>
         <div className="deck__grid">
-          {cardPools.map(({ kind, cards }) =>
+          {cardPools.map(({ kind, label, cards }) =>
             cards.length === 0 ? null : (
               <Fragment key={kind}>
-                <div className="deck__heading">{CARD_KIND_LABELS[kind]}</div>
+                <div className="deck__heading">{label}</div>
                 {cards.map(renderCardTile)}
               </Fragment>
             ),

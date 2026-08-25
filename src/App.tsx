@@ -16,8 +16,9 @@ import { useAccount } from './cloud/useAccount';
 export default function App() {
   const flow = useAppFlow();
   const account = useAccount();
-  // Which pieces and cards are currently offered, published by an admin.
-  useContentFlagSync();
+  // Which pieces and cards are currently offered, published by an admin —
+  // and, for an admin, the secret ones too.
+  useContentFlagSync(account.isAdmin);
   const { screen, draft } = flow;
 
   const menu = (

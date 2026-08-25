@@ -1,5 +1,6 @@
 import { getSpellDefinition, type Color } from '../../engine';
 import type { CardActivation as Activation } from '../useCardActivations';
+import { RailgunStrike } from './RailgunStrike';
 
 /**
  * The card moment: a played card slams into the middle of the screen, spins,
@@ -26,6 +27,11 @@ const headline: Readonly<Record<Activation['kind'], string>> = {
 
 export function CardActivation({ activation }: CardActivationProps) {
   if (!activation) return null;
+
+  // One card does not get a card flip. It gets a railgun.
+  if (activation.spell === 'rulers-authority') {
+    return <RailgunStrike key={activation.id} caster={activation.color} />;
+  }
 
   const definition = activation.spell ? getSpellDefinition(activation.spell) : null;
   const faceDown = definition === null;

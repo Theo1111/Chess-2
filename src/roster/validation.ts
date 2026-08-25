@@ -13,7 +13,7 @@ import {
   squareName,
   type Square,
 } from '../engine';
-import { isCardEnabled, isPieceEnabled } from './availability';
+import { isCardOffered, isPieceEnabled } from './availability';
 import { MANDATORY_PIECE, isDraftable } from './catalog';
 import { validateLoadout } from './loadout';
 import { isMandatory, isStartingSquare, rosterCost, startingSquares } from './roster';
@@ -172,7 +172,7 @@ export function validateAvailability(roster: Roster): RosterError[] {
   }
 
   for (const id of [...roster.spellIds, ...roster.trapIds]) {
-    if (isCardEnabled(id)) continue;
+    if (isCardOffered(id)) continue;
     let name = id;
     try {
       name = getSpellDefinition(id).name;

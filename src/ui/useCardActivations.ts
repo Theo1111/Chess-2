@@ -32,6 +32,16 @@ export const ACTIVATION_MS: Readonly<Record<CardActivation['kind'], number>> = {
   trigger: 2200,
 };
 
+/** Cards whose spectacle runs longer than the ordinary flip. */
+const CARD_MS: Readonly<Record<string, number>> = {
+  'rulers-authority': 4200,
+};
+
+/** How long this moment holds the screen. */
+export const activationDuration = (activation: CardActivation): number =>
+  (activation.spell !== null ? CARD_MS[activation.spell] : undefined) ??
+  ACTIVATION_MS[activation.kind];
+
 /**
  * What happened, card-wise, between two consecutive states. Pure and
  * exported so the hidden-information rules above can be tested directly.
@@ -94,7 +104,7 @@ export function useCardActivations(game: GameState): CardActivation | null {
     if (!head) return;
     const timer = window.setTimeout(
       () => setQueue((current) => current.slice(1)),
-      ACTIVATION_MS[head.kind],
+      activationDuration(head),
     );
     return () => window.clearTimeout(timer);
   }, [head]);

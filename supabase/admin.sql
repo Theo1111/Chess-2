@@ -74,6 +74,83 @@ create policy "only admins change content flags" on public.content_flags
 grant select on public.content_flags to anon, authenticated;
 grant insert, update, delete on public.content_flags to authenticated;
 
+-- ------------------------------------------------------------ secret cards
+-- Some cards are not in the public catalog (today: Ruler's Authority, which
+-- is a joke card that wins on the spot). The client hides them from anyone
+-- without an admin grant, but hiding is not enforcing: this is the check that
+-- actually stops a modified client from bringing one into an ONLINE game.
+--
+-- Local hot-seat games are not covered and cannot be — there is no server in
+-- that loop at all.
+
+create or replace function public.roster_has_secret_card(p_roster jsonb)
+returns boolean
+language sql
+immutable
+as $$
+  select coalesce(
+    (p_roster -> 'spellIds') ?| array['rulers-authority']
+      or (p_roster -> 'trapIds') ?| array['rulers-authority'],
+    false
+  );
+$$;
+
+grant execute on function public.roster_has_secret_card(jsonb) to authenticated;
+
+-- Wraps the army submission from online-custom.sql / online-clock.sql: same
+-- behaviour, plus the secret-card check. Run this file AFTER those two.
+create or replace function public.submit_online_army(
+  p_game uuid,
+  p_roster jsonb
+) returns text
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_me uuid := auth.uid();
+  v_game record;
+  v_white jsonb;
+  v_black jsonb;
+  v_status text;
+begin
+  select * into v_game from online_games where id = p_game for update;
+  if v_game.id is null then raise exception 'no such game'; end if;
+  if v_game.status = 'cancelled' then return 'cancelled'; end if;
+  if v_game.status <> 'drafting' then raise exception 'not drafting'; end if;
+  if v_me <> v_game.white_id and v_me <> v_game.black_id then
+    raise exception 'not a player in this game';
+  end if;
+
+  -- The gate itself. An ordinary account cannot field the secret card.
+  if roster_has_secret_card(p_roster) and not public.is_admin() then
+    raise exception 'that card is not in the catalog';
+  end if;
+
+  if v_game.draft_deadline is not null and now() > v_game.draft_deadline then
+    update online_games
+    set status = 'cancelled', reason = 'draft timed out', updated_at = now()
+    where id = p_game;
+    return 'cancelled';
+  end if;
+
+  v_white := case when v_me = v_game.white_id then p_roster else v_game.white_army end;
+  v_black := case when v_me = v_game.black_id then p_roster else v_game.black_army end;
+  v_status := case when v_white is not null and v_black is not null then 'active' else 'drafting' end;
+
+  update online_games
+  set white_army = v_white,
+      black_army = v_black,
+      status = v_status,
+      turn_started_at = case when v_status = 'active' then now() else turn_started_at end,
+      updated_at = now()
+  where id = p_game;
+
+  return v_status;
+end;
+$$;
+
+grant execute on function public.submit_online_army(uuid, jsonb) to authenticated;
+
 -- --------------------------------------------------------- granting admins
 -- The account must already exist (it is created by signing up in the app).
 -- To promote someone else, change the address and re-run just this block.

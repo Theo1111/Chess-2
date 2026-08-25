@@ -133,6 +133,8 @@ export type GameStatus =
   | 'stalemate'
   /** An Assassin reached the opponent's back row — instant win. */
   | 'assassin-victory'
+  /** A side has no royal piece left on the board at all. */
+  | 'annihilation'
   | 'draw-fifty-move'
   | 'draw-insufficient-material'
   | 'draw-threefold-repetition';

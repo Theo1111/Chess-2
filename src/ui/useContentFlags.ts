@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import {
   contentFlags,
   setContentFlags,
+  setSecretsUnlocked,
   subscribeToContentFlags,
   type ContentFlags,
 } from '../roster';
@@ -21,11 +22,16 @@ export function useContentFlags(): ContentFlags {
 }
 
 /**
- * Loads the config once at startup. Called by the app root, so a game started
- * without ever opening the menu still respects it. A failure leaves the
- * shipped catalog in place — see `fetchDisabledContent`.
+ * Loads the config once at startup, and keeps the secret catalog in step with
+ * who is signed in. Called by the app root, so a game started without ever
+ * opening the menu still respects both. A failed load leaves the shipped
+ * catalog in place — see `fetchDisabledContent`.
  */
-export function useContentFlagSync(): void {
+export function useContentFlagSync(isAdmin: boolean): void {
+  useEffect(() => {
+    setSecretsUnlocked(isAdmin);
+  }, [isAdmin]);
+
   useEffect(() => {
     let cancelled = false;
     void fetchDisabledContent().then((result) => {

@@ -36,6 +36,7 @@ import {
   hasBonusMoves,
   isInCheck,
   isRoyalAttacked,
+  royalSquares,
 } from './moveGeneration';
 import { toSan } from './notation';
 import { STANDARD_BACK_RANK, getPieceDefinition } from './pieces';
@@ -453,6 +454,11 @@ export function hasInsufficientMaterial(board: Board): boolean {
 
 /** Status of the position for the side to move. */
 function computeStatus(state: GameState, repetitionCount: number): GameStatus {
+  // A side with no royal piece has already lost, whatever the rest of the
+  // position says. Ordinary chess can never reach this; a card can.
+  if (royalSquares(state.board, 'white').length === 0) return 'annihilation';
+  if (royalSquares(state.board, 'black').length === 0) return 'annihilation';
+
   const check = isInCheck(state);
   const hasMoves = generateLegalMoves(state).length > 0;
 
@@ -479,9 +485,20 @@ export function settle(
     ...next,
     history: entry ? [...previous.history, entry] : previous.history,
     status,
-    winner: status === 'checkmate' ? opposite(next.turn) : null,
+    winner: winnerFor(next, status),
     positionCounts: { ...previous.positionCounts, [key]: repetitionCount },
   };
+}
+
+/** Who won, for the statuses that have a winner at all. */
+function winnerFor(state: GameState, status: GameStatus): Color | null {
+  if (status === 'checkmate') return opposite(state.turn);
+  if (status === 'annihilation') {
+    // Whoever still has a King standing. If nobody does, nobody won.
+    if (royalSquares(state.board, 'white').length > 0) return 'white';
+    if (royalSquares(state.board, 'black').length > 0) return 'black';
+  }
+  return null;
 }
 
 /**
