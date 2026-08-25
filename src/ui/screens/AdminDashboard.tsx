@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { PieceDefinition, SpellDefinition } from '../../engine';
 import {
   AVAILABLE_CLASSES,
@@ -10,6 +10,7 @@ import {
   setContentFlags,
 } from '../../roster';
 import type { AccountUser } from '../../cloud/auth';
+import { listAccounts, type DirectoryAccount } from '../../cloud/accounts';
 import { setContentEnabled, type ContentKind } from '../../cloud/content';
 import { PieceIcon } from '../pieces/PieceIcon';
 import { useContentFlags } from '../useContentFlags';
@@ -36,6 +37,21 @@ export function AdminDashboard({ user, onBack }: AdminDashboardProps) {
   const flags = useContentFlags();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
+  const [accounts, setAccounts] = useState<readonly DirectoryAccount[]>([]);
+
+  // Who has signed up. Credentials are not part of this and never will be —
+  // `auth.users` owns those; this is name, address, joined and last seen.
+  useEffect(() => {
+    let cancelled = false;
+    void listAccounts().then((result) => {
+      if (cancelled) return;
+      if (result.error) console.warn('account directory unavailable:', result.error);
+      else setAccounts(result.accounts);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const pieces = useMemo(() => allDraftablePieces(), []);
   const spells = useMemo(() => allSpellCards(), []);
@@ -142,6 +158,36 @@ export function AdminDashboard({ user, onBack }: AdminDashboardProps) {
         drafted, not how anything plays.
       </p>
       {error && <p className="account__error">{error}</p>}
+
+      {accounts.length > 0 && (
+        <section className="panel admin__accounts">
+          <h2 className="panel__title">Players — {accounts.length}</h2>
+          <ul className="admin__rows">
+            {accounts.map((account) => (
+              <li key={account.id} className="adminrow adminrow--account">
+                <span className="adminrow__name">
+                  {account.displayName}
+                  {account.isAdmin && (
+                    <span className="adminrow__badge" title="Admin">
+                      🛡️
+                    </span>
+                  )}
+                </span>
+                <span className="adminrow__email">{account.email}</span>
+                <span className="adminrow__cost">
+                  {account.lastSignInAt
+                    ? `seen ${new Date(account.lastSignInAt).toLocaleDateString()}`
+                    : 'never signed in'}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="admin__note admin__note--tight">
+            Passwords live in Supabase Auth (<code>auth.users</code>), which is the only place
+            they belong — reset one from the dashboard’s Authentication → Users page.
+          </p>
+        </section>
+      )}
 
       <div className="admin__columns">
         <section className="panel admin__panel">

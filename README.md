@@ -583,6 +583,19 @@ Setup:
    the content config (below). Last because it redefines `submit_online_army` to
    add the secret-card gate, so re-run it whenever you re-run one of the online
    files.
+7. Optional: [`supabase/accounts.sql`](supabase/accounts.sql) adds the admin-only
+   player directory.
+
+**Credentials are Supabase Auth's, not the app's.** `auth.users` holds the email
+and the bcrypt hash; nothing in the `public` schema mirrors the secret half, and
+nothing should. Every table and function in `public` is served to the internet by
+PostgREST using the key that ships in the browser bundle, so a password column
+there — plaintext or hashed — is one policy mistake away from a dump, and buys
+the app nothing: `signInWithPassword` verifies server-side and the client never
+holds the password after the form. What an admin actually needs is the identity
+half, and `list_accounts()` returns exactly that (name, address, joined, last
+seen, admin flag) to admins and an empty set to everyone else. Reset a password
+from the dashboard's Authentication → Users page.
 
 ### The online clock
 
