@@ -82,6 +82,35 @@ gather information. Smoke Screen and Recon prices carry the limited-fidelity
 caveat and are first in line for re-pricing. The budget rose **42 → 55** so the
 classic 5+5-style loadout (~11–20 pts of cards) still leaves a traditional army.
 
+**Batch 11** re-types the card catalog so a card's class says where its effect
+LIVES once it resolves — on nothing (**spell**), on a friendly piece (**relic**),
+on an enemy piece (**curse**), on the board (**terrain**), or hidden on the board
+awaiting an enemy (**trap**). Six cards were sitting under "spell" because that
+was the default rather than because they resolved and vanished: Shield and Last
+Stand became relics, Freeze a curse, and Smoke Screen, Null Field and Sacred
+Ground terrain. No mechanic, cost, id, name or asset changed — this pass is
+purely classification.
+
+The architectural half matters more than the table. **A kind is no longer a
+proxy for behaviour.** `filterStage` used to read "traps and terrain are not
+stopped by a Null Field", which meant re-typing a card would have silently
+granted it anti-magic immunity — so the rule now lives on the card as
+`blockedByNullField`, and the three region cards that became terrain are still
+suppressible exactly as they were, while Wall and Portal keep the bypass they
+shipped with. The same went for hidden-ness: the UI asked `isTrap` when it meant
+"does playing this conceal what it was", so cards now say `hidden` outright.
+`isTrap` survives only as the shorthand for `kind === 'trap'` that deck routing
+and the builder read, and a test pins it to exactly that.
+
+Relics and curses needed no new state: an attached effect already had two honest
+homes — `ActiveEffect` keyed to a piece id (Shield, Freeze, Mirror Shield, Crown,
+Decay) and the piece's own fields (Last Stand's extra hit point, Transform's
+type). Both live on the piece, which is the classification criterion, so nothing
+bespoke was introduced. Stored armies keep two decks (hidden vs open), not five,
+so no saved army moved a card — and `normalizeRoster` now MOVES a card that has
+been re-typed across that line instead of dropping it, should a later pass cross
+it.
+
 **Batch 10** settles where the King stands and who it may castle with. The King now
 holds its traditional seat — **e1 for White, e9 for Black** — and nothing else about
 deployment changed: every other piece still goes anywhere in the two home ranks. The
@@ -166,11 +195,21 @@ overlay closes with X, Escape or the backdrop, leaving the docked card in place.
 Below 1100px the card drops beneath a two-column army/catalog grid; below 640px
 everything stacks.
 
-**Card art**: the official 14-card art kit lives in `public/card_art/` and is mapped
-onto the card definitions via a single id → asset table in `spells.ts`
-(`SpellDefinition.artwork`). The Army Builder deck tiles render the full card faces
-(2:3, lazy-loaded), and so do the hands in the match (below). Royal Order, Tripwire
-and Mine have no art yet and fall back to icon tiles. (The kit's `07_royal_order.png` is actually the Shield
+**Card art**: twenty of the twenty-four cards have a painted face in
+`public/card_art/`, mapped onto the definitions via a single id → asset table in
+`spells.ts` (`SpellDefinition.artwork`). The kits supply 1024×1536 PNGs (63 MB
+for the set); they ship as quality-90 4:4:4 JPEGs (15 MB, ≥36.6 dB PSNR), the
+same treatment the piece cards get — checked at 1:1 on the worst-scoring card's
+rules panel, where the two encodings are indistinguishable. The Army Builder deck tiles render the full
+card faces (2:3, lazy-loaded), and so do the hands in the match (below) — one table
+feeds every surface, so the hand, the spent pile, a revealed opponent card and the
+activation flip need no per-card branches. Royal Order, Tripwire, Mine and the secret
+card have no art yet and fall back to icon tiles.
+
+The relic, curse and terrain faces arrived in a later "corrected" kit whose filenames
+each match the card they depict — the untangling the first kit needed (below) was not
+required again. Their printed rules and costs were checked against the engine
+definitions on the way in, card by card, and agree. (The kit's `07_royal_order.png` is actually the Shield
 card — it is mapped by its content, not its filename.)
 
 **Card hands**: cards are held at the table, not listed in a panel. Each side gets a
@@ -198,21 +237,23 @@ that a set trap's id never reaches the UI. The layer is decorative: it takes no
 pointer events, never blocks play, and collapses to a plain fade under
 `prefers-reduced-motion`.
 
-**Painted card art**: thirty-one of the thirty-four draftable pieces have a painted
+**Painted card art**: thirty-two of the thirty-four draftable pieces have a painted
 full-card asset — ten Queen-class in `public/queen-class/` (emerald frames), seven
 Rook-class in `public/rook-class/` (crimson), seven Knight-class in
 `public/knight-class/` (sapphire) and seven Bishop-class in `public/bishop-class/`
-(pale stone) — wired up by a single type → path table
+(pale stone) and the Pawn in `public/pawn-class/` — wired up by a single type → path
+table
 ([pieceCardArt.ts](src/ui/pieces/pieceCardArt.ts)). These images *are* the card —
 frame, title, class band, point badge, rules panel and flavour line are all
 painted in — so a piece with art renders the image in place of the drawn face, with
 only the In army / Remove / Add row beneath it. The art is scaled with
 `object-fit: contain` and never cropped or stretched: docked it shrinks to the
 column, pinned it is capped at `82vh` so its controls stay inside the window, and it
-falls back to the drawn card for the three pieces still without art: Trapper,
-Warrior and the Pawn (Pawn-class, 1 point — every deployment square its own
-piece, capped by the `too-many-units` roster rule since 42 points can now buy
-more units than the two ranks hold). It is presentation only — the table lives in the UI layer, the engine has
+falls back to the drawn card for the two pieces still without art: Trapper and
+Warrior. (The Pawn — Pawn-class, 1 point, every deployment square its own piece,
+capped by the `too-many-units` roster rule since 42 points can now buy more units
+than the two ranks hold — is painted as helmeted frontline infantry rather than as a
+literal chess pawn.) It is presentation only — the table lives in the UI layer, the engine has
 no idea the files exist, and the alt text is built from the `PieceDefinition` so
 assistive tech gets the authoritative rules rather than the printed ones. The
 supplied 1024×1536 PNGs (91 MB) ship as quality-90 4:4:4 JPEGs (22 MB total, ≥36 dB
@@ -575,10 +616,27 @@ Setup:
    to sign-in / create-account.
 5. Run [`supabase/online.sql`](supabase/online.sql),
    [`supabase/online-custom.sql`](supabase/online-custom.sql) and
-   [`supabase/online-clock.sql`](supabase/online-clock.sql) for online play,
-   drafting and the match clock.
-6. Optional: run [`supabase/admin.sql`](supabase/admin.sql) to enable admin
-   accounts and the content config (below).
+   [`supabase/online-clock.sql`](supabase/online-clock.sql) — **in that order** —
+   for online play, drafting and the match clock. Each builds on the one before,
+   and a project missing any of them answers "could not find the function … in
+   the schema cache" the moment someone searches for a game.
+6. Run [`supabase/admin.sql`](supabase/admin.sql) **last** for admin accounts and
+   the content config (below). Last because it redefines `submit_online_army` to
+   add the secret-card gate, so re-run it whenever you re-run one of the online
+   files.
+7. Optional: [`supabase/accounts.sql`](supabase/accounts.sql) adds the admin-only
+   player directory.
+
+**Credentials are Supabase Auth's, not the app's.** `auth.users` holds the email
+and the bcrypt hash; nothing in the `public` schema mirrors the secret half, and
+nothing should. Every table and function in `public` is served to the internet by
+PostgREST using the key that ships in the browser bundle, so a password column
+there — plaintext or hashed — is one policy mistake away from a dump, and buys
+the app nothing: `signInWithPassword` verifies server-side and the client never
+holds the password after the form. What an admin actually needs is the identity
+half, and `list_accounts()` returns exactly that (name, address, joined, last
+seen, admin flag) to admins and an empty set to everyone else. Reset a password
+from the dashboard's Authentication → Users page.
 
 ### The online clock
 
@@ -726,7 +784,7 @@ Nothing about them is special-cased outside their own definitions:
 - Piece artwork is deliberately simple placeholder SVG, isolated in `ui/pieces/` so a
   Chess 2 art pass replaces it in one file.
 - The relic, curse and terrain cards are priced by judgement rather than by a
-  balance run, and none of them has card-face art yet.
+  balance run.
 - A Transform can create a piece neither army drafted, and the resulting type is
   not checked against the admin content config — availability gates drafting, not
   what a card may conjure mid-game.

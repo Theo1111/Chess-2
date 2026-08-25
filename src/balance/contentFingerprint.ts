@@ -66,7 +66,11 @@ function spellEssence(definition: SpellDefinition): Record<string, unknown> {
     id: definition.id,
     cost: definition.cost,
     targeting: definition.targeting,
-    isTrap: definition.isTrap ?? false,
+    kind: definition.kind,
+    // Mechanics, not classification: what can stop the card is what changes
+    // how games play out, so that is what the fingerprint tracks.
+    blockedByNullField: definition.blockedByNullField,
+    hidden: definition.hidden,
     pieceStages: definition.pieceStages,
     primaryTargets: definition.primaryTargets,
     secondaryTargets: definition.secondaryTargets,

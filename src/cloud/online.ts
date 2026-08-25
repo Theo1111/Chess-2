@@ -51,6 +51,21 @@ interface Result {
 const NOT_CONFIGURED: Result = { error: CLOUD_SETUP_HINT };
 
 /**
+ * PostgREST answers "could not find the function … in the schema cache" when
+ * a SECURITY DEFINER function the client calls does not exist — which in
+ * practice always means one of `supabase/*.sql` has not been run against this
+ * project. Say that, rather than leaving a developer to decode it.
+ */
+const MIGRATION_HINT =
+  'This Supabase project is missing an online-play migration. Run supabase/online-custom.sql, ' +
+  'online-clock.sql and admin.sql (in that order) in the SQL editor.';
+
+export function describeOnlineError(error: string | null): string | null {
+  if (error === null) return null;
+  return /schema cache/i.test(error) ? `${error}. ${MIGRATION_HINT}` : error;
+}
+
+/**
  * Atomically pair with the oldest waiting player on the same time control,
  * or join the queue. `gameId` is null while queued. Every match is a
  * custom-army game, so the mode is fixed here rather than chosen.

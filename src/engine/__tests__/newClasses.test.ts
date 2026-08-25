@@ -75,9 +75,8 @@ describe('card kinds', () => {
     expect(getSpellDefinition('portal').kind).toBe('terrain');
     expect(getSpellDefinition('decay').kind).toBe('curse');
     expect(getSpellDefinition('transform').kind).toBe('curse');
-    // The originals keep theirs, derived from isTrap.
-    expect(getSpellDefinition('shield').kind).toBe('spell');
     expect(getSpellDefinition('tripwire').kind).toBe('trap');
+    // The whole catalog's typing lives in cardKinds.test.ts.
   });
 });
 

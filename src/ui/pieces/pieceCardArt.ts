@@ -51,6 +51,8 @@ export const PIECE_CARD_ART: Readonly<Record<string, string>> = {
   shieldmaiden: '/bishop-class/shieldmaiden.jpg',
   spearman: '/bishop-class/spearman.jpg',
   warhound: '/bishop-class/warhound.jpg',
+
+  pawn: '/pawn-class/pawn.jpg',
 };
 
 export function pieceCardArt(type: PieceType): string | undefined {

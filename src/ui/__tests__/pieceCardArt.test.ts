@@ -37,6 +37,7 @@ const PAINTED: Record<string, string[]> = {
     'spearman',
     'warhound',
   ],
+  pawn: ['pawn'],
 };
 
 /**
@@ -84,11 +85,11 @@ describe('piece card art', () => {
     }
   });
 
-  it('is still missing only Trapper, Warrior and the Pawn', () => {
+  it('is still missing only Trapper and Warrior', () => {
     const drawn = draftablePieces()
       .map((definition) => definition.type)
       .filter((type) => !pieceCardArt(type));
-    expect(drawn.sort()).toEqual(['pawn', 'trapper', 'warrior']);
+    expect(drawn.sort()).toEqual(['trapper', 'warrior']);
   });
 
   it('files each batch under its own class folder', () => {
@@ -104,7 +105,7 @@ describe('piece card art', () => {
     // engine must not know these files exist.
     for (const [type, path] of Object.entries(PIECE_CARD_ART)) {
       const definition = getPieceDefinition(type);
-      const costs: Record<string, number> = { queen: 9, rook: 5, knight: 3, bishop: 3 };
+      const costs: Record<string, number> = { queen: 9, rook: 5, knight: 3, bishop: 3, pawn: 1 };
       expect(definition.pieceClass, type).toBeTruthy();
       expect(definition.cost, type).toBe(costs[definition.pieceClass!]);
       expect(JSON.stringify(definition), type).not.toContain(path);

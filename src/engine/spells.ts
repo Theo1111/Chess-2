@@ -7,12 +7,19 @@
  * registering a definition — the turn system, UI targeting flow, history and
  * persistence pick it up automatically.
  *
- * Five kinds share that one pipeline (`SpellDefinition.kind`):
- *   spell   — open, immediate magic (Shield, Freeze, Teleport…)
- *   trap    — hidden placements that fire on an enemy (Tripwire, Mine…)
- *   relic   — equipment worn by a piece until something spends it
- *   curse   — magic that sits on an enemy piece and resolves later
- *   terrain — construction: walls and portals, which belong to the board
+ * Five kinds share that one pipeline (`SpellDefinition.kind`). A kind says
+ * WHERE THE EFFECT LIVES once the card resolves, and nothing else:
+ *
+ *   spell   — resolves and is gone; nothing outlives the cast
+ *   relic   — a good thing attached to a FRIENDLY piece until spent
+ *   curse   — a bad thing attached to an ENEMY piece until it resolves
+ *   terrain — state that lives on the board: squares and regions
+ *   trap    — board state placed in advance, waiting on an enemy action
+ *
+ * Classification is NOT a proxy for behaviour. Whether a Null Field can stop
+ * a card, and whether playing it hides what it was, are explicit properties
+ * on the definition (`blockedByNullField`, `hidden`) precisely so that
+ * re-typing a card can never silently change what it does.
  *
  * Enforcement of ongoing effects does NOT live here: a resolved Shield or
  * Freeze is an `ActiveEffect`, applied by the engine's existing funnels
@@ -56,9 +63,9 @@ export type SpellTargeting =
   | 'square-then-adjacent-square';
 
 /**
- * What sort of card this is. Presentation groups by it, and two rules read
- * it: Null Field suppresses magic but not construction, and a set trap keeps
- * its identity hidden.
+ * Where a card's effect lives after it resolves. This is a classification for
+ * players and for grouping the catalog — no rule is derived from it. See the
+ * explicit properties on `SpellDefinition` for the mechanics.
  */
 export type CardKind = 'spell' | 'trap' | 'relic' | 'curse' | 'terrain';
 
@@ -81,8 +88,23 @@ export interface SpellDefinition {
   readonly name: string;
   /** Emoji used on the card and in compact UI. */
   readonly icon: string;
-  /** Defaults to 'spell'; `registerTrap` sets 'trap'. */
+  /** Where the effect lives once played. Defaults to 'spell'. */
   readonly kind: CardKind;
+  /**
+   * Whether a Null Field suppresses this card. Stated per card, never
+   * inferred from `kind`: re-typing a card must not silently change what can
+   * stop it. Defaults to true — a card is magic unless it says otherwise.
+   * (Traps are mechanisms and Wall/Portal are masonry, so those say false.)
+   */
+  readonly blockedByNullField: boolean;
+  /**
+   * Whether playing this card conceals what it was: the opponent sees that a
+   * card was played but not which, and the UI keeps it face down until the
+   * game itself turns it over. True for traps today; it is a property of the
+   * card rather than of its kind, so a visible trap or a hidden spell would
+   * both work without touching a rule.
+   */
+  readonly hidden: boolean;
   readonly description: string;
   /**
    * Roster point cost — cards share the army budget with pieces. Data here,
@@ -145,31 +167,44 @@ export interface SpellDefinition {
 const registry = new Map<string, SpellDefinition>();
 
 /**
- * The official card-face art set. Royal Order, Tripwire and Mine await
- * theirs. (The kit's manifest labelled the Shield card "royal_order" — the
- * artwork itself is titled Shield and carries Shield's rules text, so it is
- * mapped by content, not by filename.)
+ * The official card-face art set, shipped as quality-90 4:4:4 JPEG like the
+ * piece cards (1024×1536, ≥36.6 dB PSNR against the supplied PNGs — the
+ * printed rules text is pixel-for-pixel legible, and the set costs 15 MB
+ * rather than 63). Royal Order, Tripwire, Mine and the secret card await
+ * theirs. (The first kit's manifest labelled the Shield card
+ * "royal_order" — the artwork itself is titled Shield and carries Shield's
+ * rules text, so it is mapped by content, not by filename. The corrected kit
+ * that brought the relics, curses and terrain needed no such untangling: each
+ * file depicts the card it is named after.)
  */
 const CARD_ARTWORK: Readonly<Record<string, string>> = {
-  shield: '/card_art/shield.png',
-  reveal: '/card_art/reveal.png',
-  freeze: '/card_art/freeze.png',
-  teleport: '/card_art/teleport.png',
-  sacrifice: '/card_art/sacrifice.png',
-  'smoke-screen': '/card_art/smoke-screen.png',
-  reconnaissance: '/card_art/reconnaissance.png',
-  'last-stand': '/card_art/last-stand.png',
-  interference: '/card_art/interference.png',
-  'null-field': '/card_art/null-field.png',
-  'sacred-ground': '/card_art/sacred-ground.png',
-  sonar: '/card_art/sonar.png',
-  'web-trap': '/card_art/web-trap.png',
-  'dead-zone': '/card_art/dead-zone.png',
+  shield: '/card_art/shield.jpg',
+  reveal: '/card_art/reveal.jpg',
+  freeze: '/card_art/freeze.jpg',
+  teleport: '/card_art/teleport.jpg',
+  sacrifice: '/card_art/sacrifice.jpg',
+  'smoke-screen': '/card_art/smoke-screen.jpg',
+  reconnaissance: '/card_art/reconnaissance.jpg',
+  'last-stand': '/card_art/last-stand.jpg',
+  interference: '/card_art/interference.jpg',
+  'null-field': '/card_art/null-field.jpg',
+  'sacred-ground': '/card_art/sacred-ground.jpg',
+  sonar: '/card_art/sonar.jpg',
+  'web-trap': '/card_art/web-trap.jpg',
+  'dead-zone': '/card_art/dead-zone.jpg',
+  'mirror-shield': '/card_art/mirror-shield.jpg',
+  'crown-of-command': '/card_art/crown-of-command.jpg',
+  decay: '/card_art/decay.jpg',
+  transform: '/card_art/transform.jpg',
+  wall: '/card_art/wall.jpg',
+  portal: '/card_art/portal.jpg',
 };
 
 /**
- * `kind` defaults to 'spell' and `isTrap` is derived from it, so every
- * existing trap check keeps working while the registry gains a vocabulary.
+ * Fills in what a registration leaves out: `kind` defaults to 'spell', a card
+ * is stopped by a Null Field unless it says otherwise, and only a card that
+ * asks to be hidden is. `isTrap` stays as the shorthand for `kind === 'trap'`
+ * that deck routing and the builder read.
  */
 export function registerSpell(definition: RegisteredCard): void {
   const kind: CardKind = definition.kind ?? (definition.isTrap === true ? 'trap' : 'spell');
@@ -178,12 +213,18 @@ export function registerSpell(definition: RegisteredCard): void {
     ...definition,
     kind,
     isTrap: kind === 'trap',
+    blockedByNullField: definition.blockedByNullField ?? true,
+    hidden: definition.hidden ?? false,
     ...(artwork ? { artwork } : {}),
   });
 }
 
-/** What a card registration may leave out: the kind, which defaults. */
-type RegisteredCard = Omit<SpellDefinition, 'kind'> & { readonly kind?: CardKind };
+/** What a card registration may leave out — everything with a default. */
+type RegisteredCard = Omit<SpellDefinition, 'kind' | 'blockedByNullField' | 'hidden'> & {
+  readonly kind?: CardKind;
+  readonly blockedByNullField?: boolean;
+  readonly hidden?: boolean;
+};
 
 /** Every card of one kind, in registry order. */
 export const cardsOfKind = (kind: CardKind): SpellDefinition[] =>
@@ -241,6 +282,8 @@ const enemyPieces = (state: GameState, caster: Color, includeRoyal: boolean): Sq
 registerSpell({
   id: 'shield',
   name: 'Shield',
+  // A good thing that lives on a friendly piece until it expires.
+  kind: 'relic',
   icon: '🛡️',
   cost: 4,
   description:
@@ -288,6 +331,8 @@ registerSpell({
 registerSpell({
   id: 'freeze',
   name: 'Freeze',
+  // The effect lives on the enemy piece it holds still.
+  kind: 'curse',
   icon: '❄️',
   cost: 1,
   description:
@@ -417,6 +462,8 @@ const pieceCount = (state: GameState, color: Color): number =>
 registerSpell({
   id: 'smoke-screen',
   name: 'Smoke Screen',
+  // A region of the board behaves differently while it lasts.
+  kind: 'terrain',
   icon: '🌫️',
   cost: 2,
   description:
@@ -493,6 +540,8 @@ registerSpell({
 registerSpell({
   id: 'last-stand',
   name: 'Last Stand',
+  // The extra hit point lives on the piece it was given to.
+  kind: 'relic',
   icon: '🔰',
   cost: 4,
   description:
@@ -535,6 +584,8 @@ registerSpell({
 registerSpell({
   id: 'null-field',
   name: 'Null Field',
+  // A region of the board behaves differently while it lasts.
+  kind: 'terrain',
   icon: '🌀',
   cost: 1,
   description:
@@ -558,6 +609,8 @@ registerSpell({
 registerSpell({
   id: 'sacred-ground',
   name: 'Sacred Ground',
+  // The square itself gains a property.
+  kind: 'terrain',
   icon: '🌟',
   cost: 2,
   description:
@@ -596,6 +649,10 @@ function registerTrap(config: {
     description: config.description,
     targeting: 'square',
     isTrap: true,
+    // A trap is a mechanism, not a spell, so anti-magic does not reach it —
+    // and setting one must not announce which one it was.
+    blockedByNullField: false,
+    hidden: true,
     primaryTargets: (state) => {
       const blocked = blockedSquares(state);
       const squares: Square[] = [];
@@ -669,7 +726,11 @@ registerTrap({
 
 
 /* ------------------------------------------------------------------ */
-/* Relics — equipment a piece wears until something spends it          */
+/* The relic, curse and terrain batch                                  */
+/*                                                                     */
+/* Kind is a field, not a position in this file: the cards above carry  */
+/* their own `kind` too (Shield is a relic, Freeze a curse, Smoke       */
+/* Screen terrain). These are simply the ones that arrived together.    */
 /* ------------------------------------------------------------------ */
 
 /** Squares a card may build on: empty, unblocked, and not already claimed. */
@@ -775,10 +836,6 @@ registerSpell({
   describe: (targets) => `Crown of Command→${squareName(targets[0]!)}`,
 });
 
-/* ------------------------------------------------------------------ */
-/* Terrain — construction, which belongs to the board                  */
-/* ------------------------------------------------------------------ */
-
 /** Two rounds: one turn each, twice. */
 const WALL_PLIES = 4;
 
@@ -787,6 +844,11 @@ registerSpell({
   name: 'Wall',
   icon: '🧱',
   kind: 'terrain',
+  // Masonry, not magic: a Null Field never stopped it being built, and this
+  // is that rule stated rather than inferred from the word "terrain". The
+  // older region cards (Smoke Screen, Null Field, Sacred Ground) are magic
+  // and stay suppressible — being re-typed as terrain changed nothing.
+  blockedByNullField: false,
   cost: 3,
   description:
     'Raise a wall across two adjacent empty squares. Nothing may stand on them or move through them for two rounds.',
@@ -820,6 +882,8 @@ registerSpell({
   name: 'Portal',
   icon: '🌀',
   kind: 'terrain',
+  // As Wall: construction, unaffected by anti-magic. See the note there.
+  blockedByNullField: false,
   cost: 3,
   description:
     'Open a gate on each of two empty squares. A piece standing on one may step out of the other, arriving without crossing the ground between. The gates stay open.',
@@ -839,10 +903,6 @@ registerSpell({
   }),
   describe: (targets) => `Portal→${squareName(targets[0]!)}⇄${squareName(targets[1]!)}`,
 });
-
-/* ------------------------------------------------------------------ */
-/* Curses — magic that sits on an enemy piece and resolves later       */
-/* ------------------------------------------------------------------ */
 
 /** Turns its owner still gets with the cursed piece before it crumbles. */
 const DECAY_TURNS = 3;
@@ -1017,14 +1077,21 @@ function filterStage(
   stage: 0 | 1,
   squares: Square[],
 ): Square[] {
-  // A Null Field suppresses magic. A trap is a mechanism and terrain is
-  // masonry — neither is stopped by it.
-  if (definition.kind === 'trap' || definition.kind === 'terrain') return squares;
-  const nulls = nullFieldSquares(state);
-  let filtered = nulls.size ? squares.filter((square) => !nulls.has(square)) : squares;
+  let filtered = squares;
+
+  // Null Field: read from the card's own flag, not from what kind of card it
+  // is. Calling something terrain does not make it immune to anything.
+  if (definition.blockedByNullField) {
+    const nulls = nullFieldSquares(state);
+    if (nulls.size) filtered = filtered.filter((square) => !nulls.has(square));
+  }
+
+  // Sacred Ground: only stages that actually point at a piece can be barred
+  // by the occupant's immunity, which `pieceStages` already states outright.
   if (definition.pieceStages?.includes(stage)) {
     filtered = filtered.filter((square) => !isCardImmuneAt(state, square));
   }
+
   return filtered;
 }
 

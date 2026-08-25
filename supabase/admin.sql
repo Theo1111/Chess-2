@@ -1,8 +1,13 @@
 -- Chess 2 — admin accounts and the published content config
 --
--- Run this once in your project's SQL editor (Supabase dashboard → SQL →
--- New query → paste → Run), after `schema.sql`. It is idempotent: re-running
--- is safe.
+-- Run this LAST, in your project's SQL editor (Supabase dashboard → SQL →
+-- New query → paste → Run):
+--
+--   schema.sql → online.sql → online-custom.sql → online-clock.sql → admin.sql
+--
+-- Last because it redefines `submit_online_army` to add the secret-card gate,
+-- and that definition has to be the one that survives. Re-run it whenever you
+-- re-run one of the online files. It is idempotent: re-running is safe.
 --
 -- Two pieces:
 --   1. `admins`       — who may change the game's content config.

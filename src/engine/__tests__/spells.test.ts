@@ -90,7 +90,7 @@ describe('spell system', () => {
       'null-field', 'sacred-ground', 'sonar', 'web-trap', 'dead-zone',
     ];
     for (const id of withArt) {
-      expect(getSpellDefinition(id).artwork, id).toBe(`/card_art/${id}.png`);
+      expect(getSpellDefinition(id).artwork, id).toBe(`/card_art/${id}.jpg`);
     }
     // No art shipped for these three — they fall back to icon tiles.
     for (const id of ['royal-order', 'tripwire', 'mine']) {

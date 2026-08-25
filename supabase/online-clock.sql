@@ -285,6 +285,13 @@ begin
 end;
 $$;
 
+-- ------------------------------------------------------- retire the old RPC
+-- online.sql's two-argument version predates game modes. Every client sends
+-- p_mode now, so the overload is dead — and leaving it in place lets a stale
+-- client pair players into a game with no armies at all.
+
+drop function if exists public.find_online_match(text, text);
+
 -- ------------------------------------------------------------------ grants
 
 grant execute on function public.time_control_ms(text) to anon, authenticated;

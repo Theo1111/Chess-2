@@ -124,19 +124,24 @@ export function validateLoadout(roster: Roster): RosterError[] {
     }
     seen.add(id);
   }
+  // The two stored decks are hidden-vs-open, not the five kinds: a trap goes
+  // in the trap deck and everything else — spell, relic, curse, terrain —
+  // shares the other. `normalizeRoster` puts a stray card right; this reports
+  // one that reached validation anyway.
   for (const id of roster.spellIds) {
     if (isTrapCard(id)) {
       errors.push({
         code: 'invalid-card',
-        message: `${getSpellDefinition(id).name} is a Trap Card, not a Spell.`,
+        message: `${getSpellDefinition(id).name} is a Trap and belongs in the trap deck.`,
       });
     }
   }
   for (const id of roster.trapIds) {
     if (isKnownCard(id) && !isTrapCard(id)) {
+      const definition = getSpellDefinition(id);
       errors.push({
         code: 'invalid-card',
-        message: `${getSpellDefinition(id).name} is a Spell Card, not a Trap.`,
+        message: `${definition.name} is a ${CARD_KIND_LABELS[definition.kind].replace(/s$/, '')} and does not belong in the trap deck.`,
       });
     }
   }
@@ -147,14 +152,26 @@ export function validateLoadout(roster: Roster): RosterError[] {
 export const isLoadoutComplete = (roster: Roster): boolean => validateLoadout(roster).length === 0;
 
 /**
- * Upgrades an army saved before shared-budget cards existed: missing decks
- * become empty, unknown cards are dropped rather than crashing anything.
- * (Armies saved under the old free-card system may now be over budget —
- * composition validation reports that; the builder is the place to trim.)
+ * Upgrades an army saved under older rules: missing decks become empty and
+ * unknown cards are dropped rather than crashing anything.
+ *
+ * A card that has since been re-typed across the hidden/open line is MOVED to
+ * the deck it now belongs in rather than dropped — an army saved before a
+ * classification change keeps every card it paid for. (Armies saved under the
+ * old free-card system may now be over budget; composition validation reports
+ * that, and the builder is the place to trim.)
  */
 export function normalizeRoster(raw: Roster | (Omit<Roster, 'spellIds' | 'trapIds'> & Partial<Roster>)): Roster {
-  const spellIds = (raw.spellIds ?? []).filter((id) => isKnownCard(id) && !isTrapCard(id));
-  const trapIds = (raw.trapIds ?? []).filter((id) => isTrapCard(id));
+  const spellIds: string[] = [];
+  const trapIds: string[] = [];
+  const seen = new Set<string>();
+
+  for (const id of [...(raw.spellIds ?? []), ...(raw.trapIds ?? [])]) {
+    if (!isKnownCard(id) || seen.has(id)) continue;
+    seen.add(id);
+    (isTrapCard(id) ? trapIds : spellIds).push(id);
+  }
+
   return { ...raw, spellIds, trapIds } as Roster;
 }
 
