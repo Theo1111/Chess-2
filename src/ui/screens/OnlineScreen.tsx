@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createInitialState, opposite } from '../../engine';
+import { createInitialState, getSpellDefinition, opposite } from '../../engine';
 import type { AccountUser } from '../../cloud/auth';
 import {
   cancelMatchmaking,
@@ -16,6 +16,7 @@ import {
 } from '../timeControls';
 import { Board } from '../components/Board';
 import { CardActivation } from '../components/CardActivation';
+import { CardChoiceDialog } from '../components/CardChoiceDialog';
 import { CardHand } from '../components/CardHand';
 import { CapturedPieces } from '../components/CapturedPieces';
 import { ClockPanel } from '../components/ClockPanel';
@@ -331,6 +332,16 @@ function OnlineGameView({
       </main>
 
       <CardActivation activation={activation} />
+
+      {controller.cardChoice && (
+        <CardChoiceDialog
+          card={getSpellDefinition(controller.cardChoice.spell).name}
+          color={opposite(viewer)}
+          options={controller.cardChoice.options}
+          onChoose={controller.chooseCard}
+          onCancel={controller.cancelSpell}
+        />
+      )}
 
       {controller.pendingChoice && (
         <MoveChoiceDialog

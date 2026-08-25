@@ -82,6 +82,30 @@ gather information. Smoke Screen and Recon prices carry the limited-fidelity
 caveat and are first in line for re-pricing. The budget rose **42 → 55** so the
 classic 5+5-style loadout (~11–20 pts of cards) still leaves a traditional army.
 
+**Batch 9** adds three new card classes, so a deck is no longer just spells and
+traps. **Relics** are equipment worn by a piece until something spends it:
+*Mirror Shield* (3) turns aside the first enemy card that targets its wearer —
+that card is spent for nothing, and so is the relic — and *Crown of Command* (4)
+buys its owner a bonus Pawn move the first time the crowned piece moves.
+**Terrain** is construction, which belongs to the board and is not suppressed by
+a Null Field: *Wall* (3) makes two adjacent empty squares impassable for two
+rounds, and *Portal* (3) opens two gates a piece may step between, arriving
+without crossing the ground in between (so nothing on the way — a Tripwire, an
+Ambusher — can touch it). **Curses** sit on an enemy piece and resolve later:
+*Decay* (4) crumbles its victim after three of its owner's turns (destroyed, not
+captured; Kings and Queen-class pieces are too strong to rot) and *Transform* (5)
+demotes a piece down the class ladder — Queen → Rook → Bishop/Knight → Pawn —
+into any piece of a lower class **you** choose.
+
+All five kinds run through the one card pipeline: `SpellDefinition.kind` is what
+the builder groups by and what two rules read (Null Field suppresses magic but
+not masonry; a set trap keeps its identity hidden). Transform is the first card
+that asks its caster a question as well as a target, so `SpellCast` gained an
+optional `choice` and definitions an optional `choices` list — the action layer
+enumerates one action per legal answer, which is how the AI, the balance lab and
+online replay all pick it up unchanged. The new prices are estimates, not
+evidence: unlike the original cards they have not been through a baseline run.
+
 **Batch 8** grows the arena: the board is now **9×9** (files a–i, ranks 1–9) and the
 roster budget is **55 points** (originally 42; raised when cards joined the pool). Deployment zones are each side's first two ranks (1–2
 and 8–9), pawns start on ranks 2/8 and promote on 9/1, castling uses the a/i-file
@@ -610,6 +634,28 @@ and whether it is an admin — to React. Nothing in
 `src/engine` or `src/balance` imports any of it. Match saves are fire-and-forget
 on game end — a failed sync logs a warning and never touches gameplay.
 
+### How the new classes plug in
+
+Nothing about them is special-cased outside their own definitions:
+
+- **Relics and curses are `ActiveEffect`s** with no expiry — `expiresAtTurnStartOf: null`
+  means "until something spends it", so `tickEffects` leaves them alone and
+  `pruneEffects` still drops them when the piece dies. Each is enforced in exactly
+  one funnel: Mirror Shield in `castSpell`, the Crown in `applyMove` (it arms the
+  same bonus window a Royal Order does), Decay in `beginTurn`.
+- **`beginTurn`** is the shared turn-boundary helper both `advance` and `castSpell`
+  call: effects age, and a Decay whose victim is the side now to move counts down.
+  A piece that crumbles joins its owner's reserves — destruction, not capture, so
+  nothing is credited and no on-capture ability fires.
+- **Walls are square statuses** (`blockedSquares` already made terrain impassable);
+  **portals are their own field** on `GameState` because, unlike every other board
+  effect, terrain that was built stays built and so carries no ply counter. A piece
+  standing on a gate gets one extra `teleport` move in the generator.
+- **A deflected card is still a spent turn** — and because it changes nothing, it
+  can never be used to answer a check. `castWouldBeDeflected` exists so the action
+  layer's legality probe models the same rule; the two disagreeing is precisely the
+  bug the random-play fuzz caught.
+
 ## Known limitations
 
 - Local hot-seat games are untimed and have no undo, no saved games and no AI — all
@@ -634,3 +680,8 @@ on game end — a failed sync logs a warning and never touches gameplay.
   if long-lived states are ever kept in memory in bulk.
 - Piece artwork is deliberately simple placeholder SVG, isolated in `ui/pieces/` so a
   Chess 2 art pass replaces it in one file.
+- The relic, curse and terrain cards are priced by judgement rather than by a
+  balance run, and none of them has card-face art yet.
+- A Transform can create a piece neither army drafted, and the resulting type is
+  not checked against the admin content config — availability gates drafting, not
+  what a card may conjure mid-game.

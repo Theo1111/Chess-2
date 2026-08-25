@@ -3,6 +3,7 @@ import {
   getSpellDefinition,
   opposite,
   visibleOpponentSpells,
+  type CardKind,
   type Color,
   type GameState,
   type Square,
@@ -58,6 +59,20 @@ function castingPrompt(spell: string, stage: 'first' | 'second'): string {
       return 'Select a piece to protect';
     case 'interference':
       return 'Select a revealed enemy trap';
+    case 'mirror-shield':
+      return 'Select a piece to guard';
+    case 'crown-of-command':
+      return 'Select a non-royal piece to crown';
+    case 'decay':
+      return 'Select an enemy piece to curse';
+    case 'transform':
+      return 'Select an enemy piece to transform';
+    case 'wall':
+      return stage === 'first'
+        ? 'Select the first empty square of the wall'
+        : 'Select an adjacent empty square';
+    case 'portal':
+      return stage === 'first' ? 'Select the first gate’s square' : 'Select the second gate’s square';
     case 'tripwire':
     case 'sonar':
     case 'web-trap':
@@ -70,6 +85,15 @@ function castingPrompt(spell: string, stage: 'first' | 'second'): string {
 }
 
 const colorName = (color: Color): string => (color === 'white' ? 'White' : 'Black');
+
+/** What to call each kind in the hand's rules line. */
+const KIND_NOUNS: Readonly<Record<CardKind, string>> = {
+  spell: 'spell',
+  trap: 'trap',
+  relic: 'relic',
+  curse: 'curse',
+  terrain: 'terrain card',
+};
 
 /** The face of a card: its official artwork, or an icon-and-name fallback. */
 function CardFace({ definition }: { definition: SpellDefinition }) {
@@ -135,7 +159,7 @@ export function CardHand({
         style={{ '--index': index } as CSSProperties}
         className={[
           'handcard',
-          definition.isTrap ? 'handcard--trap' : 'handcard--spell',
+          `handcard--${definition.kind}`,
           uncastable ? 'handcard--locked' : '',
           active ? 'handcard--armed' : '',
         ]
@@ -243,8 +267,8 @@ export function CardHand({
 
       {side === 'own' && !casting && inspectedCard && (
         <p className="hand__info">
-          <strong>{inspectedCard.name}</strong> ·{' '}
-          {inspectedCard.isTrap ? 'one-time trap' : 'one-time spell'} — {inspectedCard.description}
+          <strong>{inspectedCard.name}</strong> · one-time {KIND_NOUNS[inspectedCard.kind]} —{' '}
+          {inspectedCard.description}
         </p>
       )}
     </section>

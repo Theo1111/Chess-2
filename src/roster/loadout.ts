@@ -13,7 +13,7 @@
  */
 
 import { allSpellDefinitions, getSpellDefinition } from '../engine';
-import type { SpellDefinition } from '../engine';
+import type { CardKind, SpellDefinition } from '../engine';
 import { isCardEnabled } from './availability';
 import { canAffordCard } from './roster';
 import type { Roster, RosterError } from './types';
@@ -36,6 +36,28 @@ export function availableSpellCards(): SpellDefinition[] {
 /** Every selectable Trap Card, in registry order. */
 export function availableTrapCards(): SpellDefinition[] {
   return allTrapCards().filter((definition) => isCardEnabled(definition.id));
+}
+
+/**
+ * The kinds a deck is built from, in the order the builder shows them.
+ * Everything that is not a trap shares the spell deck — decks are two lists
+ * because that is what a saved army stores, while `kind` is what a player
+ * sees.
+ */
+export const CARD_KINDS: readonly CardKind[] = ['spell', 'relic', 'curse', 'terrain', 'trap'];
+
+export const CARD_KIND_LABELS: Readonly<Record<CardKind, string>> = {
+  spell: 'Spells',
+  relic: 'Relics',
+  curse: 'Curses',
+  terrain: 'Terrain',
+  trap: 'Traps',
+};
+
+/** Selectable cards of one kind, in registry order. */
+export function availableCardsOfKind(kind: CardKind): SpellDefinition[] {
+  const pool = kind === 'trap' ? availableTrapCards() : availableSpellCards();
+  return pool.filter((definition) => definition.kind === kind);
 }
 
 const isKnownCard = (id: string): boolean => {

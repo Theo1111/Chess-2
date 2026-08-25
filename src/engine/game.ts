@@ -25,7 +25,7 @@ import {
 
 export { straightPath };
 import { boardHasAbilityPieces } from './auras';
-import { pruneEffects, tickEffects } from './effects';
+import { beginTurn, hasEffect, pruneEffects } from './effects';
 import { tickPlies } from './boardEffects';
 import { interceptTripwire, processTraps } from './traps';
 import { ALL_CASTLING_RULES, FULL_CASTLING_RIGHTS, NO_CASTLING_RIGHTS } from './castling';
@@ -102,6 +102,12 @@ export const STARTER_SPELLS: readonly string[] = [
   'interference',
   'null-field',
   'sacred-ground',
+  'mirror-shield',
+  'crown-of-command',
+  'wall',
+  'portal',
+  'decay',
+  'transform',
   'tripwire',
   'sonar',
   'web-trap',
@@ -140,6 +146,7 @@ function finalizeNewGame(base: BaseStateInput, options: NewGameOptions = {}): Ga
     traps: [],
     regions: [],
     squareStatuses: [],
+    portals: [],
     pawnOrder: null,
     rosterTypes: {
       white: collectRosterTypes(base.board, 'white'),
@@ -363,9 +370,16 @@ export function advance(state: GameState, move: Move): GameState {
     }
   }
 
+  // The opponent's turn begins here: effects age, and a Decay curse whose
+  // victim belongs to them may crumble that piece before they play.
+  const started = beginTurn(board, state.effects, opposite(state.turn), 'main');
+  for (const lost of started.decayed) {
+    reserves = { ...reserves, [lost.color]: [...reserves[lost.color], lost.type] };
+  }
+
   return {
     ...state,
-    board,
+    board: started.board,
     turn: opposite(state.turn),
     phase: 'main',
     ambush,
@@ -379,11 +393,11 @@ export function advance(state: GameState, move: Move): GameState {
     reserves,
     rosterTypes,
     spells,
-    effects: tickEffects(state.effects, board, opposite(state.turn), 'main'),
+    effects: started.effects,
     regions: tickPlies(state.regions),
     squareStatuses: tickPlies(state.squareStatuses),
     pawnOrder: null,
-    hasAbilityPieces: state.hasAbilityPieces && boardHasAbilityPieces(board),
+    hasAbilityPieces: state.hasAbilityPieces && boardHasAbilityPieces(started.board),
   };
 }
 
@@ -563,7 +577,12 @@ export function applyMove(state: GameState, chosen: Move): GameState {
   // move takes precedence, then a Duelist's free move. A tripped piece
   // forfeits every bonus for the turn.
   if (!move.bonus && !isTerminal(passedStatus) && !interception.tripped) {
-    const orderArmed = state.pawnOrder?.stage === 'armed' && state.pawnOrder.color === state.turn;
+    // A Crown of Command spends itself the first time its wearer moves,
+    // buying the same bonus Pawn move a Royal Order does.
+    const wearer = state.board[move.from] ?? null;
+    const crowned = wearer !== null && hasEffect(state.effects, 'crown', wearer.id);
+    const orderArmed =
+      crowned || (state.pawnOrder?.stage === 'armed' && state.pawnOrder.color === state.turn);
     const orderProbe: GameState = {
       ...passed,
       turn: state.turn,
@@ -571,10 +590,16 @@ export function applyMove(state: GameState, chosen: Move): GameState {
       pawnOrder: { color: state.turn, stage: 'active' },
     };
     if (orderArmed && generateLegalMoves(orderProbe, state.turn).length > 0) {
+      const wearerId = wearer?.id;
+      const kept = crowned
+        ? state.effects.filter(
+            (effect) => !(effect.kind === 'crown' && effect.targetPieceId === wearerId),
+          )
+        : state.effects;
       const bonusState: GameState = {
         ...orderProbe,
         fullmoveNumber: state.fullmoveNumber,
-        effects: pruneEffects(state.effects, passed.board),
+        effects: pruneEffects(kept, passed.board),
         regions: state.regions,
         squareStatuses: passed.squareStatuses,
       };
@@ -603,12 +628,19 @@ export function applyMove(state: GameState, chosen: Move): GameState {
 /** Declines the free move and passes the turn. */
 export function skipBonusMove(state: GameState): GameState {
   if (state.phase !== 'bonus') return state;
+  const started = beginTurn(state.board, state.effects, opposite(state.turn), 'main');
+  let reserves = state.reserves;
+  for (const lost of started.decayed) {
+    reserves = { ...reserves, [lost.color]: [...reserves[lost.color], lost.type] };
+  }
   const passed: GameState = {
     ...state,
+    board: started.board,
     turn: opposite(state.turn),
     phase: 'main' as TurnPhase,
     fullmoveNumber: state.turn === 'black' ? state.fullmoveNumber + 1 : state.fullmoveNumber,
-    effects: tickEffects(state.effects, state.board, opposite(state.turn), 'main'),
+    effects: started.effects,
+    reserves,
     regions: tickPlies(state.regions),
     squareStatuses: tickPlies(state.squareStatuses),
     pawnOrder: null,

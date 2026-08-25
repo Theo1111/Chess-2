@@ -2,10 +2,11 @@ import { Fragment, useMemo, useState } from 'react';
 import type { Color, PieceDefinition, PieceType, SpellDefinition } from '../../engine';
 import {
   AVAILABLE_CLASSES,
+  CARD_KINDS,
+  CARD_KIND_LABELS,
   CLASS_LABELS,
   addUnit,
-  availableSpellCards,
-  availableTrapCards,
+  availableCardsOfKind,
   canAfford,
   canAffordCard,
   cardCost,
@@ -48,8 +49,7 @@ export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirr
   // memoised against a dependency the linter cannot see.
   useContentFlags();
   const catalog = draftablePieces();
-  const spellPool = availableSpellCards();
-  const trapPool = availableTrapCards();
+  const cardPools = CARD_KINDS.map((kind) => ({ kind, cards: availableCardsOfKind(kind) }));
   const [inspected, setInspected] = useState<PieceType>(catalog[0]?.type ?? 'queen');
   const [tab, setTab] = useState<BuilderTab>('pieces');
   /**
@@ -194,10 +194,14 @@ export function TeamBuilder({ color, roster, onChange, onConfirm, onBack, onMirr
           <span className="deck__full"> · {remaining} left in budget</span>
         </h2>
         <div className="deck__grid">
-          <div className="deck__heading">Spells</div>
-          {spellPool.map(renderCardTile)}
-          <div className="deck__heading">Traps</div>
-          {trapPool.map(renderCardTile)}
+          {cardPools.map(({ kind, cards }) =>
+            cards.length === 0 ? null : (
+              <Fragment key={kind}>
+                <div className="deck__heading">{CARD_KIND_LABELS[kind]}</div>
+                {cards.map(renderCardTile)}
+              </Fragment>
+            ),
+          )}
         </div>
         {remaining === 0 && (
           <p className="deck__hint">

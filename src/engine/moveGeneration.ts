@@ -16,7 +16,7 @@ import { findAbility, hasAbility } from './abilities';
 import { applyMoveToBoard } from './apply';
 import { effectivePatterns, isImmobilized } from './auras';
 import { isSquareAttackedBy } from './attacks';
-import { blockedSquares } from './boardEffects';
+import { blockedSquares, portalExit } from './boardEffects';
 import { captureAllowed, classOfPiece } from './captureRules';
 import { BOARD_SIZE, fileOf, makeSquare, promotionRank, rankOf } from './board';
 import { walkPatterns } from './patterns';
@@ -105,6 +105,16 @@ export function generatePseudoLegalMovesFrom(
   );
 
   if (definition.generateSpecial) moves.push(...definition.generateSpecial(ctx));
+
+  // A Portal is a door, not a destination: a piece already standing on one
+  // may step out of the far end. It arrives without crossing the ground
+  // between, so nothing on the way — a Tripwire, an Ambusher — can touch it.
+  if (!ctx.attacksOnly) {
+    const exit = portalExit(state, from);
+    if (exit !== null && !state.board[exit] && !blocked.has(exit)) {
+      moves.push({ from, to: exit, piece: piece.type, color: piece.color, teleport: true });
+    }
+  }
 
   const transformed = definition.transformMoves ? definition.transformMoves(moves, ctx) : moves;
   return withAbilityVariants(dedupeByTarget(transformed), ctx);

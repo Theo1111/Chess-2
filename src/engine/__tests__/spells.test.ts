@@ -4,7 +4,7 @@ import '../rookPieces';
 import '../knightPieces';
 import '../bishopPieces';
 import { parseSquareName, squareName } from '../board';
-import { applyMove, createInitialState, createStateFromFen } from '../game';
+import { STARTER_SPELLS, applyMove, createInitialState, createStateFromFen } from '../game';
 import { findLegalMove, generateLegalMovesFrom, isInCheck } from '../moveGeneration';
 import {
   castSpell,
@@ -49,7 +49,7 @@ describe('spell system', () => {
       expect(state.spells[color].available).toContain('shield');
       expect(state.spells[color].available).toContain('sacrifice');
       expect(state.spells[color].available).toContain('tripwire');
-      expect(state.spells[color].available).toHaveLength(17);
+      expect(state.spells[color].available).toHaveLength(STARTER_SPELLS.length);
       expect(state.spells[color].used).toEqual([]);
     }
   });
@@ -224,7 +224,7 @@ describe('Reveal', () => {
     state = cast(state, 'white', 'reveal');
     const seen = visibleOpponentSpells(state, 'white');
     expect(seen).not.toBeNull();
-    expect(seen?.available).toHaveLength(17);
+    expect(seen?.available).toHaveLength(STARTER_SPELLS.length);
     expect(seen?.available).toContain('shield');
 
     // Black burns a card; the view keeps tracking availability.

@@ -6,8 +6,11 @@
  *  - **Regions** (`regions`): a set of squares under an area effect —
  *    Smoke Screen (visual concealment) and Null Field (spell suppression).
  *  - **Square statuses** (`squareStatuses`): per-square gameplay metadata —
- *    Sacred Ground (card immunity for the occupant) and active Dead Zones
- *    (blocked terrain).
+ *    Sacred Ground (card immunity for the occupant), active Dead Zones and
+ *    Walls (both blocked terrain).
+ *  - **Portals** (`portals`): pairs of linked squares a piece may step
+ *    between. Terrain that was built stays built, so unlike everything else
+ *    here they carry no duration.
  *  - **Trap placements** (`traps`): hidden one-shot board effects with a
  *    standard hidden/revealed lifecycle, detectable by Sonar-style scans
  *    and disabled by Interference-style spells.
@@ -35,7 +38,7 @@ export interface RegionEffect {
   readonly pliesRemaining: number;
 }
 
-export type SquareStatusKind = 'sacred-ground' | 'dead-zone';
+export type SquareStatusKind = 'sacred-ground' | 'dead-zone' | 'wall';
 
 export interface SquareStatus {
   readonly id: string;
@@ -43,6 +46,17 @@ export interface SquareStatus {
   readonly owner: Color;
   readonly square: Square;
   readonly pliesRemaining: number;
+}
+
+/**
+ * Two linked squares. A piece standing on one may step out of the other —
+ * see `portalExit` and the move generator. Both squares are stored so
+ * either end works; a square belongs to at most one pair.
+ */
+export interface PortalPair {
+  readonly id: string;
+  readonly owner: Color;
+  readonly squares: readonly [Square, Square];
 }
 
 export type TrapKind = 'tripwire' | 'sonar' | 'web-trap' | 'dead-zone' | 'mine';
@@ -83,15 +97,33 @@ export function regionSquares(center: Square): Square[] {
 
 const EMPTY_SET: ReadonlySet<Square> = new Set();
 
-/** Squares that are temporarily impassable terrain (active Dead Zones). */
+/** Squares that are impassable terrain right now (Dead Zones and Walls). */
 export function blockedSquares(state: GameState): ReadonlySet<Square> {
   if (state.squareStatuses.length === 0) return EMPTY_SET;
   const blocked = new Set<Square>();
   for (const status of state.squareStatuses) {
-    if (status.kind === 'dead-zone') blocked.add(status.square);
+    if (status.kind === 'dead-zone' || status.kind === 'wall') blocked.add(status.square);
   }
   return blocked.size ? blocked : EMPTY_SET;
 }
+
+/**
+ * Where a piece standing on `square` may emerge, or null if the square is
+ * not a portal. Only the far end is offered: a portal you are standing on
+ * is a door, not a destination.
+ */
+export function portalExit(state: GameState, square: Square): Square | null {
+  for (const portal of state.portals) {
+    const [a, b] = portal.squares;
+    if (a === square) return b;
+    if (b === square) return a;
+  }
+  return null;
+}
+
+/** True if the square is either end of any portal. */
+export const isPortal = (state: GameState, square: Square): boolean =>
+  state.portals.some((portal) => portal.squares[0] === square || portal.squares[1] === square);
 
 /** True if the piece standing on `square` is immune to card effects. */
 export function isCardImmuneAt(state: GameState, square: Square): boolean {

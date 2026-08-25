@@ -3,7 +3,7 @@ import '../../engine/customPieces';
 import '../../engine/rookPieces';
 import '../../engine/knightPieces';
 import '../../engine/bishopPieces';
-import { createStateFromFen, toFen } from '../../engine';
+import { STARTER_SPELLS, createStateFromFen, toFen } from '../../engine';
 import { RandomBot } from '../../ai/randomBot';
 import { actionKey } from '../../ai/actions';
 import { MatchSimulationError, runMatch } from '../runMatch';
@@ -88,11 +88,11 @@ describe('runMatch', () => {
         const left = Object.values(telemetry.survivors[color]).reduce((a, b) => a + b, 0);
         expect(left).toBeLessThanOrEqual(initial);
       }
-      // Card events never exceed the 17-card starter book per side.
+      // Card events never exceed the starter book each side is dealt.
       const byColor = { white: 0, black: 0 };
       for (const event of telemetry.cardsPlayed) byColor[event.by]++;
-      expect(byColor.white).toBeLessThanOrEqual(17);
-      expect(byColor.black).toBeLessThanOrEqual(17);
+      expect(byColor.white).toBeLessThanOrEqual(STARTER_SPELLS.length);
+      expect(byColor.black).toBeLessThanOrEqual(STARTER_SPELLS.length);
     }
     expect([...outcomes.values()].reduce((a, b) => a + b, 0)).toBe(40);
   });

@@ -2660,6 +2660,72 @@ button {
   pointer-events: none;
 }
 
+/* Wall terrain: masonry, not blight — a wall is built, not cursed. */
+.square--wall {
+  background:
+    linear-gradient(180deg, rgba(120, 108, 96, 0.95), rgba(78, 70, 62, 0.95)) !important;
+  box-shadow: inset 0 0 0 1px rgba(30, 26, 22, 0.8);
+}
+
+.square--wall::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Two courses of staggered brick, drawn in mortar lines. */
+  background-image:
+    linear-gradient(rgba(40, 34, 30, 0.7) 2px, transparent 2px),
+    linear-gradient(90deg, rgba(40, 34, 30, 0.7) 2px, transparent 2px);
+  background-size: 100% 50%, 50% 50%;
+  background-position: 0 25%, 25% 0;
+  pointer-events: none;
+}
+
+/* Portal: a lit gate, and a slow swirl so the pair reads as one thing. */
+.square--portal::after {
+  content: '';
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(150, 110, 255, 0.75) 0%, rgba(90, 60, 200, 0.35) 45%, transparent 70%);
+  box-shadow: 0 0 12px rgba(150, 110, 255, 0.6), inset 0 0 10px rgba(220, 200, 255, 0.55);
+  animation: portal-swirl 6s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes portal-swirl {
+  from { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.08); }
+  to { transform: rotate(360deg) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .square--portal::after {
+    animation: none;
+  }
+}
+
+/* Badges claim a corner each so a piece can wear several at once:
+   spells top-left, freeze bottom-left, relics top-right, curses bottom-right. */
+.square__effect--relic {
+  left: auto;
+  right: 3%;
+  filter: drop-shadow(0 0 3px rgba(255, 214, 120, 0.9));
+}
+
+/* Two relics on one piece (a crowned Mirror Shield) stack downward. */
+.square__effect--relic ~ .square__effect--relic {
+  top: 26%;
+}
+
+.square__effect--curse {
+  top: auto;
+  bottom: 2%;
+  left: auto;
+  right: 3%;
+  filter: drop-shadow(0 0 3px rgba(140, 220, 120, 0.9));
+}
+
 .square__trap {
   position: absolute;
   bottom: 3%;

@@ -35,6 +35,15 @@ export interface GameSession {
   readonly pendingChoice: { from: Square; to: Square; options: readonly Move[] } | null;
   /** A spell card is armed and waiting for its target(s). */
   readonly casting: { readonly spell: string; readonly first: Square | null } | null;
+  /**
+   * Targets are in; the card now wants its caster to name a piece as well
+   * (the Transform curse). Held until they pick or cancel.
+   */
+  readonly cardChoice: {
+    readonly spell: string;
+    readonly targets: readonly Square[];
+    readonly options: readonly PieceType[];
+  } | null;
 }
 
 const newSession = (game: GameState): GameSession => ({
@@ -42,6 +51,7 @@ const newSession = (game: GameState): GameSession => ({
   selected: null,
   pendingChoice: null,
   casting: null,
+  cardChoice: null,
 });
 
 const NEVER_LOCKED = (): boolean => false;
@@ -59,7 +69,7 @@ export function useChessGame(
   isLocked: () => boolean = NEVER_LOCKED,
 ) {
   const [session, setSession] = useState<GameSession>(() => newSession(createGame()));
-  const { game, selected, pendingChoice, casting } = session;
+  const { game, selected, pendingChoice, casting, cardChoice } = session;
 
   /** Legal moves for the currently selected piece, keyed by destination. */
   const movesBySquare = useMemo(() => {
@@ -105,15 +115,40 @@ export function useChessGame(
           const next = castSpell(state, { spell, color: state.turn, targets: [] });
           return next ? newSession(next) : current;
         }
-        return { ...current, selected: null, pendingChoice: null, casting: { spell, first: null } };
+        return {
+          ...current,
+          selected: null,
+          pendingChoice: null,
+          cardChoice: null,
+          casting: { spell, first: null },
+        };
       });
     },
     [isLocked],
   );
 
   const cancelSpell = useCallback(() => {
-    setSession((current) => ({ ...current, casting: null }));
+    setSession((current) => ({ ...current, casting: null, cardChoice: null }));
   }, []);
+
+  /** Answers a card's piece question and casts it. */
+  const chooseCard = useCallback(
+    (choice: PieceType) => {
+      if (isLocked()) return;
+      setSession((current) => {
+        const pending = current.cardChoice;
+        if (!pending || !pending.options.includes(choice)) return current;
+        const next = castSpell(current.game, {
+          spell: pending.spell,
+          color: current.game.turn,
+          targets: pending.targets,
+          choice,
+        });
+        return next ? newSession(next) : { ...current, cardChoice: null };
+      });
+    },
+    [isLocked],
+  );
 
   const canSelect = useCallback(
     (square: Square) => {
@@ -170,6 +205,20 @@ export function useChessGame(
           return;
         }
         const targets = casting.first === null ? [square] : [casting.first, square];
+
+        // A card that also names a piece pauses here for that answer.
+        const choices = getSpellDefinition(casting.spell).choices;
+        if (choices) {
+          const options = choices(game, game.turn, targets);
+          if (options.length === 0) return;
+          setSession((current) => ({
+            ...current,
+            casting: null,
+            cardChoice: { spell: casting.spell, targets, options },
+          }));
+          return;
+        }
+
         const next = castSpell(game, { spell: casting.spell, color: game.turn, targets });
         if (next) setSession(newSession(next));
         return;
@@ -224,9 +273,11 @@ export function useChessGame(
     selected,
     pendingChoice,
     casting,
+    cardChoice,
     spellTargets,
     selectSpell,
     cancelSpell,
+    chooseCard,
     movesBySquare,
     lastMove,
     checkSquare,

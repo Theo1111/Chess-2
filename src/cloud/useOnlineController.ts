@@ -8,6 +8,7 @@ import {
   spellSecondaryTargets,
   type GameState,
   type Move,
+  type PieceType,
   type Square,
 } from '../engine';
 import type { GameAction } from '../ai/actions';
@@ -39,11 +40,19 @@ export function useOnlineController(
     options: readonly Move[];
   } | null>(null);
   const [casting, setCasting] = useState<{ spell: string; first: Square | null } | null>(null);
+  const [cardChoice, setCardChoice] = useState<{
+    spell: string;
+    targets: readonly Square[];
+    options: readonly PieceType[];
+  } | null>(null);
 
   // An armed card is only meaningful on this player's own turn; losing the
   // turn (or the game ending) disarms it.
   useEffect(() => {
-    if (!canAct) setCasting(null);
+    if (!canAct) {
+      setCasting(null);
+      setCardChoice(null);
+    }
   }, [canAct]);
 
   const movesBySquare = useMemo(() => {
@@ -79,6 +88,7 @@ export function useOnlineController(
       setSelected(null);
       setPendingChoice(null);
       setCasting(null);
+      setCardChoice(null);
       onAction(action);
     },
     [onAction],
@@ -109,7 +119,25 @@ export function useOnlineController(
     [canAct, myColor, game, casting, submit],
   );
 
-  const cancelSpell = useCallback(() => setCasting(null), []);
+  const cancelSpell = useCallback(() => {
+    setCasting(null);
+    setCardChoice(null);
+  }, []);
+
+  /** Answers a card's piece question and submits the cast. */
+  const chooseCard = useCallback(
+    (choice: PieceType) => {
+      if (!canAct || !cardChoice || !cardChoice.options.includes(choice)) return;
+      submit({
+        kind: 'spell',
+        spell: cardChoice.spell,
+        targets: cardChoice.targets,
+        trap: getSpellDefinition(cardChoice.spell).isTrap === true,
+        choice,
+      });
+    },
+    [canAct, cardChoice, submit],
+  );
 
   /** Declines an optional bonus move (Duelist free move / Royal Order pawn). */
   const passBonus = useCallback(() => {
@@ -148,6 +176,17 @@ export function useOnlineController(
           return;
         }
         const targets = casting.first === null ? [square] : [casting.first, square];
+
+        // A card that also names a piece pauses here for that answer.
+        const choices = getSpellDefinition(casting.spell).choices;
+        if (choices && myColor !== null) {
+          const options = choices(game, myColor, targets);
+          if (options.length === 0) return;
+          setCasting(null);
+          setCardChoice({ spell: casting.spell, targets, options });
+          return;
+        }
+
         submit({
           kind: 'spell',
           spell: casting.spell,
@@ -193,6 +232,8 @@ export function useOnlineController(
     cancelChoice,
     selectSpell,
     cancelSpell,
+    cardChoice,
+    chooseCard,
     passBonus,
   };
 }

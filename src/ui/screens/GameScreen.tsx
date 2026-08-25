@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { opposite, type GameState } from '../../engine';
+import { getSpellDefinition, opposite, type GameState } from '../../engine';
 import { createGameFromRosters } from '../../roster';
 import type { AccountUser } from '../../cloud/auth';
 import { buildMatchRow } from '../../cloud/records';
@@ -9,6 +9,7 @@ import type { DraftState } from '../useAppFlow';
 import { Board } from '../components/Board';
 import { CardActivation } from '../components/CardActivation';
 import { CardHand } from '../components/CardHand';
+import { CardChoiceDialog } from '../components/CardChoiceDialog';
 import { CapturedPieces } from '../components/CapturedPieces';
 import { GameControls } from '../components/GameControls';
 import { MoveChoiceDialog } from '../components/MoveChoiceDialog';
@@ -140,6 +141,16 @@ export function GameScreen({ draft, user, onExit }: GameScreenProps) {
       </main>
 
       <CardActivation activation={activation} />
+
+      {controller.cardChoice && (
+        <CardChoiceDialog
+          card={getSpellDefinition(controller.cardChoice.spell).name}
+          color={opposite(game.turn)}
+          options={controller.cardChoice.options}
+          onChoose={controller.chooseCard}
+          onCancel={controller.cancelSpell}
+        />
+      )}
 
       {pendingChoice && (
         <MoveChoiceDialog

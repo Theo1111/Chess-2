@@ -101,8 +101,16 @@ export function Board({ controller, orientation = 'white' }: BoardProps) {
       }
     }
     const sacred = new Set<Square>();
+    const walls = new Set<Square>();
     for (const status of game.squareStatuses) {
       if (status.kind === 'sacred-ground') sacred.add(status.square);
+      if (status.kind === 'wall') walls.add(status.square);
+    }
+    // Portals are public terrain: both players can see where the gates are.
+    const portals = new Set<Square>();
+    for (const portal of game.portals) {
+      portals.add(portal.squares[0]);
+      portals.add(portal.squares[1]);
     }
     const traps = new Map<Square, { icon: string; revealed: boolean }>();
     for (const trap of visibleTraps(game, game.turn)) {
@@ -116,7 +124,10 @@ export function Board({ controller, orientation = 'white' }: BoardProps) {
       smoke,
       nullField,
       sacred,
-      dead: blockedSquares(game),
+      walls,
+      portals,
+      // Walls are drawn as masonry rather than as dead ground.
+      dead: new Set([...blockedSquares(game)].filter((square) => !walls.has(square))),
       traps,
       obscured: obscuredSquaresFor(game, game.turn),
     };
@@ -200,6 +211,8 @@ export function Board({ controller, orientation = 'white' }: BoardProps) {
               overlays.nullField.has(square) ? 'square--null' : '',
               overlays.sacred.has(square) ? 'square--sacred' : '',
               overlays.dead.has(square) ? 'square--dead' : '',
+              overlays.walls.has(square) ? 'square--wall' : '',
+              overlays.portals.has(square) ? 'square--portal' : '',
             ]
               .filter(Boolean)
               .join(' ');
@@ -237,6 +250,26 @@ export function Board({ controller, orientation = 'white' }: BoardProps) {
                     )}
                     {game.effects.some((e) => e.kind === 'webbed' && e.targetPieceId === piece.id) && (
                       <span className="square__effect square__effect--freeze" title="Webbed">🕸️</span>
+                    )}
+                    {game.effects.some(
+                      (e) => e.kind === 'mirror-shield' && e.targetPieceId === piece.id,
+                    ) && (
+                      <span className="square__effect square__effect--relic" title="Mirror Shield">
+                        🪞
+                      </span>
+                    )}
+                    {game.effects.some((e) => e.kind === 'crown' && e.targetPieceId === piece.id) && (
+                      <span className="square__effect square__effect--relic" title="Crown of Command">
+                        👑
+                      </span>
+                    )}
+                    {decayTurns(game, piece.id) !== null && (
+                      <span
+                        className="square__effect square__effect--curse"
+                        title={`Decaying — ${decayTurns(game, piece.id)} turn(s) left`}
+                      >
+                        🦠
+                      </span>
                     )}
                     {piece.origin !== undefined && piece.origin !== piece.type && (
                       <span
@@ -279,6 +312,14 @@ export function Board({ controller, orientation = 'white' }: BoardProps) {
       </div>
     </div>
   );
+}
+
+/** Turns a cursed piece has left, or null if it is not decaying. */
+function decayTurns(game: GameState, pieceId: string): number | null {
+  const curse = game.effects.find(
+    (effect) => effect.kind === 'decay' && effect.targetPieceId === pieceId,
+  );
+  return curse?.turnsRemaining ?? null;
 }
 
 function isLastMoveSquare(lastMove: Move | null, square: Square): boolean {
