@@ -145,10 +145,12 @@ export interface SpellDefinition {
 const registry = new Map<string, SpellDefinition>();
 
 /**
- * The official card-face art set. Royal Order, Tripwire and Mine await
- * theirs. (The kit's manifest labelled the Shield card "royal_order" — the
- * artwork itself is titled Shield and carries Shield's rules text, so it is
- * mapped by content, not by filename.)
+ * The official card-face art set. Royal Order, Tripwire, Mine and the secret
+ * card await theirs. (The first kit's manifest labelled the Shield card
+ * "royal_order" — the artwork itself is titled Shield and carries Shield's
+ * rules text, so it is mapped by content, not by filename. The corrected kit
+ * that brought the relics, curses and terrain needed no such untangling: each
+ * file depicts the card it is named after.)
  */
 const CARD_ARTWORK: Readonly<Record<string, string>> = {
   shield: '/card_art/shield.png',
@@ -165,6 +167,12 @@ const CARD_ARTWORK: Readonly<Record<string, string>> = {
   sonar: '/card_art/sonar.png',
   'web-trap': '/card_art/web-trap.png',
   'dead-zone': '/card_art/dead-zone.png',
+  'mirror-shield': '/card_art/mirror-shield.png',
+  'crown-of-command': '/card_art/crown-of-command.png',
+  decay: '/card_art/decay.png',
+  transform: '/card_art/transform.png',
+  wall: '/card_art/wall.png',
+  portal: '/card_art/portal.png',
 };
 
 /**

@@ -166,11 +166,18 @@ overlay closes with X, Escape or the backdrop, leaving the docked card in place.
 Below 1100px the card drops beneath a two-column army/catalog grid; below 640px
 everything stacks.
 
-**Card art**: the official 14-card art kit lives in `public/card_art/` and is mapped
-onto the card definitions via a single id → asset table in `spells.ts`
-(`SpellDefinition.artwork`). The Army Builder deck tiles render the full card faces
-(2:3, lazy-loaded), and so do the hands in the match (below). Royal Order, Tripwire
-and Mine have no art yet and fall back to icon tiles. (The kit's `07_royal_order.png` is actually the Shield
+**Card art**: twenty of the twenty-four cards have a painted face in
+`public/card_art/`, mapped onto the definitions via a single id → asset table in
+`spells.ts` (`SpellDefinition.artwork`). The Army Builder deck tiles render the full
+card faces (2:3, lazy-loaded), and so do the hands in the match (below) — one table
+feeds every surface, so the hand, the spent pile, a revealed opponent card and the
+activation flip need no per-card branches. Royal Order, Tripwire, Mine and the secret
+card have no art yet and fall back to icon tiles.
+
+The relic, curse and terrain faces arrived in a later "corrected" kit whose filenames
+each match the card they depict — the untangling the first kit needed (below) was not
+required again. Their printed rules and costs were checked against the engine
+definitions on the way in, card by card, and agree. (The kit's `07_royal_order.png` is actually the Shield
 card — it is mapped by its content, not its filename.)
 
 **Card hands**: cards are held at the table, not listed in a panel. Each side gets a
@@ -198,21 +205,24 @@ that a set trap's id never reaches the UI. The layer is decorative: it takes no
 pointer events, never blocks play, and collapses to a plain fade under
 `prefers-reduced-motion`.
 
-**Painted card art**: thirty-one of the thirty-four draftable pieces have a painted
+**Painted card art**: thirty-two of the thirty-four draftable pieces have a painted
 full-card asset — ten Queen-class in `public/queen-class/` (emerald frames), seven
 Rook-class in `public/rook-class/` (crimson), seven Knight-class in
 `public/knight-class/` (sapphire) and seven Bishop-class in `public/bishop-class/`
-(pale stone) — wired up by a single type → path table
+(pale stone) and the Pawn in `public/pawn-class/` — wired up by a single type → path
+table
 ([pieceCardArt.ts](src/ui/pieces/pieceCardArt.ts)). These images *are* the card —
 frame, title, class band, point badge, rules panel and flavour line are all
 painted in — so a piece with art renders the image in place of the drawn face, with
 only the In army / Remove / Add row beneath it. The art is scaled with
 `object-fit: contain` and never cropped or stretched: docked it shrinks to the
 column, pinned it is capped at `82vh` so its controls stay inside the window, and it
-falls back to the drawn card for the three pieces still without art: Trapper,
-Warrior and the Pawn (Pawn-class, 1 point — every deployment square its own
-piece, capped by the `too-many-units` roster rule since 42 points can now buy
-more units than the two ranks hold). It is presentation only — the table lives in the UI layer, the engine has
+falls back to the drawn card for the two pieces still without art: Trapper and
+Warrior. (The Pawn — Pawn-class, 1 point, every deployment square its own piece,
+capped by the `too-many-units` roster rule since 42 points can now buy more units
+than the two ranks hold — is painted as helmeted frontline infantry rather than as a
+literal chess pawn, and ships as the PNG its kit supplied rather than being
+re-encoded like its JPEG siblings.) It is presentation only — the table lives in the UI layer, the engine has
 no idea the files exist, and the alt text is built from the `PieceDefinition` so
 assistive tech gets the authoritative rules rather than the printed ones. The
 supplied 1024×1536 PNGs (91 MB) ship as quality-90 4:4:4 JPEGs (22 MB total, ≥36 dB
@@ -743,7 +753,7 @@ Nothing about them is special-cased outside their own definitions:
 - Piece artwork is deliberately simple placeholder SVG, isolated in `ui/pieces/` so a
   Chess 2 art pass replaces it in one file.
 - The relic, curse and terrain cards are priced by judgement rather than by a
-  balance run, and none of them has card-face art yet.
+  balance run.
 - A Transform can create a piece neither army drafted, and the resulting type is
   not checked against the admin content config — availability gates drafting, not
   what a card may conjure mid-game.
@@ -751,3 +761,7 @@ Nothing about them is special-cased outside their own definitions:
   is enforced server-side (see above). It is also unpriced by design: at 0 points
   it is a joke, not a balance decision, and the balance laboratory does not draft
   secret cards.
+- Card faces ship as full-size 1024×1536 PNGs (~2.9 MB each, 58 MB for the set)
+  because that is how every kit supplied them. The piece cards were re-encoded to
+  quality-90 JPEG; the card faces have not been, so there is roughly 45 MB to
+  reclaim whenever load time starts to matter.
