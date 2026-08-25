@@ -23,10 +23,12 @@ import {
   describeErrors,
   draftablePieces,
   DEFAULT_ROSTER_BUDGET,
+  enthroneKing,
   isMandatory,
   placeUnit,
   removeUnit,
   startingSquares,
+  throneSquare,
   toggleSpellCard,
   toggleTrapCard,
   validateRoster,
@@ -68,13 +70,19 @@ function buyCards(roster: Roster, rng: SeededRng, maxPoints: number): Roster {
   return next;
 }
 
-/** Random legal deployment across the colour's two starting ranks. */
+/**
+ * Random legal deployment across the colour's two starting ranks. The King is
+ * not part of it: it holds its throne, and that square is not on offer.
+ */
 function randomPlacement(roster: Roster, rng: SeededRng): Roster {
-  const squares = rng.shuffle(startingSquares(roster.color));
-  let next = roster;
-  roster.units.forEach((unit, index) => {
-    next = placeUnit(next, unit.id, squares[index]!);
-  });
+  const throne = throneSquare(roster.color);
+  const squares = rng.shuffle(startingSquares(roster.color).filter((square) => square !== throne));
+  let next = enthroneKing(roster);
+  let index = 0;
+  for (const unit of next.units) {
+    if (isMandatory(unit)) continue;
+    next = placeUnit(next, unit.id, squares[index++]!);
+  }
   return next;
 }
 

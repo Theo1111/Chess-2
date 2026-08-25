@@ -23,6 +23,12 @@ export interface CardActivation {
   readonly spell: string | null;
   /** Who played it. */
   readonly color: Color;
+  /**
+   * The position as it stood the instant before. A spectacle that acts on the
+   * board — Ruler's Authority tearing it apart — renders this, so the pieces
+   * it destroys are still there to be destroyed.
+   */
+  readonly before: GameState;
 }
 
 /** How long each kind of moment holds the screen. Matches the CSS timings. */
@@ -61,6 +67,7 @@ export function cardActivationsBetween(
       kind: trap ? 'set' : 'cast',
       spell: trap ? null : entry.cast.spell,
       color: entry.cast.color,
+      before: previous,
     });
   }
 
@@ -69,7 +76,13 @@ export function cardActivationsBetween(
   );
   for (const trap of next.traps) {
     if (trap.revealed && wasHidden.has(trap.id)) {
-      events.push({ id: nextId(), kind: 'trigger', spell: trap.trap, color: trap.owner });
+      events.push({
+        id: nextId(),
+        kind: 'trigger',
+        spell: trap.trap,
+        color: trap.owner,
+        before: previous,
+      });
     }
   }
 

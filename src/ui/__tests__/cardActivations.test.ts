@@ -13,7 +13,7 @@ import {
   type GameState,
   type Square,
 } from '../../engine';
-import { cardActivationsBetween } from '../useCardActivations';
+import { cardActivationsBetween, type CardActivation } from '../useCardActivations';
 
 const sq = (name: string): Square => {
   const square = parseSquareName(name);
@@ -42,12 +42,24 @@ const ids = () => {
 const between = (before: GameState, after: GameState) =>
   cardActivationsBetween(before, after, ids());
 
+/**
+ * What the event says about itself. Each one also carries `before` — the
+ * position it happened to, which the board's own spectacle renders — and that
+ * whole state is not what these assertions are about.
+ */
+const announced = (event: CardActivation) => ({
+  id: event.id,
+  kind: event.kind,
+  spell: event.spell,
+  color: event.color,
+});
+
 describe('cardActivationsBetween', () => {
   it('announces an openly cast spell, face up', () => {
     const before = createStateFromFen('9/k8/9/9/9/9/9/9/K2R5 w - - 0 1');
     const after = cast(before, 'white', 'shield', 'd1');
 
-    expect(between(before, after)).toEqual([
+    expect(between(before, after).map(announced)).toEqual([
       { id: 1, kind: 'cast', spell: 'shield', color: 'white' },
     ]);
   });
@@ -56,7 +68,7 @@ describe('cardActivationsBetween', () => {
     const before = createStateFromFen('9/k8/9/9/9/9/9/9/K2R5 w - - 0 1');
     const after = cast(before, 'white', 'tripwire', 'd5');
 
-    const events = between(before, after);
+    const events = between(before, after).map(announced);
     expect(events).toEqual([{ id: 1, kind: 'set', spell: null, color: 'white' }]);
     // Belt and braces: the trap's identity must not leak through the event.
     expect(JSON.stringify(events)).not.toContain('tripwire');
@@ -69,7 +81,7 @@ describe('cardActivationsBetween', () => {
 
     // The rook is stopped on the wire, and only now is the card named.
     expect(tripped.board[sq('d5')]?.type).toBe('rook');
-    expect(between(armed, tripped)).toEqual([
+    expect(between(armed, tripped).map(announced)).toEqual([
       { id: 1, kind: 'trigger', spell: 'tripwire', color: 'white' },
     ]);
   });

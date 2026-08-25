@@ -1619,6 +1619,20 @@ button {
   cursor: copy;
 }
 
+/* The King's seat: marked as spoken for, and not a drop target. */
+.square--throne {
+  box-shadow: inset 0 0 0 2px rgba(201, 160, 77, 0.75);
+  cursor: default;
+}
+
+.square--throne::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 214, 120, 0.28), transparent 68%);
+  pointer-events: none;
+}
+
 .square__piece--held {
   opacity: 0.45;
 }
@@ -2945,6 +2959,215 @@ button {
   0% { opacity: 0; }
   12% { opacity: 1; }
   80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ------------------------------------------------- the board's destruction */
+
+/*
+ * The other half of Ruler's Authority: the overlay fires the shot, and this
+ * is what the shot does to the board it crosses. Every timing here is an
+ * offset into the same four-second clock — the beam lands at 1.3s, and the
+ * burn sweeps left to right behind it (`--file` is set on every square).
+ */
+
+.board-frame--annihilated {
+  animation: board-hit 2.9s cubic-bezier(0.2, 0.8, 0.3, 1) 1.28s both;
+}
+
+/* The blast front: a white wall of light crossing the playfield, leaving
+   scorch behind it. */
+.board-frame--annihilated::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(12, 10, 8, 0.92) 0%,
+    rgba(20, 16, 12, 0.9) 46%,
+    rgba(255, 255, 255, 0.95) 50%,
+    rgba(160, 225, 255, 0.35) 53%,
+    transparent 58%
+  );
+  background-size: 260% 100%;
+  background-position: -160% 0;
+  opacity: 0;
+  pointer-events: none;
+  animation: board-scorch 2.9s cubic-bezier(0.3, 0.7, 0.4, 1) 1.28s both;
+}
+
+/* Each square burns as the front reaches its file. */
+.board-frame--annihilated .square--burned::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 240, 200, 0.95), rgba(90, 30, 10, 0.85) 60%, rgba(10, 8, 6, 0.9));
+  opacity: 0;
+  pointer-events: none;
+  animation: square-burn 2.6s ease-out both;
+  animation-delay: calc(1.3s + var(--file, 0) * 42ms);
+}
+
+/* Pieces caught in the beam: whited out, then blown to nothing. */
+.square__piece--vaporised {
+  animation: piece-vaporise 900ms cubic-bezier(0.3, 0, 0.7, 1) both;
+  animation-delay: calc(1.31s + var(--file, 0) * 42ms);
+}
+
+/* The one exception. The Ruler does not flinch. */
+.square--spared {
+  z-index: 6;
+}
+
+.square__piece--spared {
+  animation: piece-spared 2.9s ease-out 1.28s both;
+}
+
+/* --- the ruin layer: seams and flying masonry ------------------------- */
+
+/* Inset to the painted playfield, exactly like `.board`. Above the scorch
+   pass, which is the frame's own ::after and would otherwise bury it. */
+.board__ruin {
+  position: absolute;
+  z-index: 3;
+  top: 5.82%;
+  right: 7.58%;
+  bottom: 8.37%;
+  left: 7.89%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.board__cracks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.board__cracks path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 0.7;
+  stroke-linejoin: miter;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  filter: drop-shadow(0 0 6px rgba(160, 225, 255, 0.9));
+  animation: crack-open 2.7s cubic-bezier(0.1, 0.9, 0.2, 1) both;
+  animation-delay: calc(1.3s + var(--i) * 60ms);
+}
+
+.board__debris {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1.8vmin;
+  height: 1.4vmin;
+  margin: -0.7vmin 0 0 -0.9vmin;
+  background: linear-gradient(150deg, #e8dfc4 0%, #a49579 45%, #4a4437 100%);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  /* Fired off in every direction, then dragged down. */
+  --a: calc(var(--i) * (360deg / var(--n)));
+  animation: debris-fly 2.1s cubic-bezier(0.15, 0.75, 0.35, 1) both;
+  animation-delay: calc(1.3s + var(--i) * 9ms);
+}
+
+/* --- the timeline ----------------------------------------------------- */
+
+@keyframes board-hit {
+  0% { transform: none; filter: none; }
+  2% { transform: translate3d(0, -6px, 0) scale(1.012); filter: brightness(3.4) contrast(0.7); }
+  6% { transform: translate3d(9px, 7px, 0) rotate(0.5deg); filter: brightness(1.6); }
+  10% { transform: translate3d(-7px, 4px, 0) rotate(-0.6deg); filter: brightness(1.1); }
+  16% { transform: translate3d(4px, 8px, 0) rotate(0.35deg); }
+  26% { transform: translate3d(-2px, 10px, 0) rotate(-0.2deg); }
+  80% {
+    transform: translate3d(0, 14px, 0) rotate(0.15deg) scale(0.985);
+    filter: brightness(0.42) saturate(0.35);
+  }
+  /* The dust settles as the overlay lifts: what is left is an empty board,
+     handed back to the game without a visible cut. */
+  100% { transform: none; filter: none; }
+}
+
+@keyframes board-scorch {
+  0% { opacity: 0; background-position: -160% 0; }
+  8% { opacity: 1; }
+  58% { opacity: 1; background-position: 60% 0; }
+  80% { opacity: 1; background-position: 160% 0; }
+  100% { opacity: 0; background-position: 160% 0; }
+}
+
+@keyframes square-burn {
+  0% { opacity: 0; transform: scale(0.4); }
+  6% { opacity: 1; transform: scale(1.25); }
+  22% { opacity: 0.85; transform: scale(1); }
+  82% { opacity: 0.72; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+@keyframes piece-vaporise {
+  0% { opacity: 1; filter: none; transform: none; }
+  12% { opacity: 1; filter: brightness(8) saturate(0) drop-shadow(0 0 14px #fff); transform: scale(1.18); }
+  40% { opacity: 0.85; filter: brightness(5) saturate(0) blur(1px); transform: translateY(-8%) scale(1.05) rotate(3deg); }
+  100% { opacity: 0; filter: brightness(3) blur(7px); transform: translateY(-42%) scale(0.55) rotate(-9deg); }
+}
+
+@keyframes piece-spared {
+  0% { transform: none; filter: none; }
+  4% { transform: scale(1.14); filter: brightness(2.6) drop-shadow(0 0 16px rgba(255, 226, 150, 1)); }
+  14% { transform: scale(1); }
+  40% { filter: drop-shadow(0 0 12px rgba(255, 214, 120, 0.95)); }
+  84% { transform: scale(1.06); filter: drop-shadow(0 0 20px rgba(255, 214, 120, 0.9)) brightness(1.25); }
+  100% { transform: none; filter: none; }
+}
+
+@keyframes crack-open {
+  0% { stroke-dashoffset: 200; opacity: 0; stroke: #fff; stroke-width: 1.4; }
+  8% { opacity: 1; }
+  30% { stroke-dashoffset: 0; stroke: #fff; }
+  60% { stroke: #2a1c12; stroke-width: 0.9; filter: none; }
+  84% { stroke-dashoffset: 0; opacity: 0.9; stroke: #140d08; stroke-width: 0.9; filter: none; }
+  100% { stroke-dashoffset: 0; opacity: 0; stroke: #140d08; stroke-width: 0.9; filter: none; }
+}
+
+@keyframes debris-fly {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(0) rotate(calc(-1 * var(--a))) scale(0.5);
+  }
+  55% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(34vmin) rotate(calc(-1 * var(--a)))
+      translateY(26vmin) rotate(420deg) scale(1.1);
+  }
+}
+
+/* The board still dies, it just does not thrash about doing it. */
+@media (prefers-reduced-motion: reduce) {
+  .board-frame--annihilated,
+  .square__piece--spared {
+    animation: none;
+  }
+  .board-frame--annihilated {
+    filter: brightness(0.42) saturate(0.35);
+  }
+  .board__debris {
+    display: none;
+  }
+  .square__piece--vaporised {
+    animation: piece-gone 1.6s ease 1.3s both;
+  }
+}
+
+/* Reduced motion still loses the piece; it just does not put on a show. */
+@keyframes piece-gone {
+  0%, 55% { opacity: 1; }
   100% { opacity: 0; }
 }
 

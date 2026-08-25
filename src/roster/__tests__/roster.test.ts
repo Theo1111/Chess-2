@@ -11,6 +11,7 @@ import {
   autoPlace,
   canAfford,
   cardCost,
+  clearPlacement,
   createRoster,
   mirrorRoster,
   placeUnit,
@@ -20,6 +21,7 @@ import {
   rosterCost,
   startingSquares,
   unitCost,
+  unplaceUnit,
   unplacedUnits,
 } from '../roster';
 import { createGameFromRosters, createMatch } from '../setup';
@@ -31,6 +33,22 @@ const sq = (name: string): Square => {
   if (square === null) throw new Error(`bad square ${name}`);
   return square;
 };
+
+/**
+ * As `buildRoster`, but writing the placement map directly — `placeUnit` now
+ * keeps the King on its throne, so an army that breaks that rule (a saved one
+ * from before it, or a tampered payload) can only be built by hand.
+ */
+function rawRoster(
+  color: 'white' | 'black',
+  types: string[],
+  placement: Record<string, string>,
+): Roster {
+  const roster = buildRoster(color, types);
+  const squares: Record<string, Square> = {};
+  for (const [unitId, square] of Object.entries(placement)) squares[unitId] = sq(square);
+  return { ...roster, placement: squares };
+}
 
 /**
  * Roster helper: buy types, then place unit ids on named squares. A standard
@@ -275,11 +293,36 @@ describe('placement', () => {
   });
 
   it('placing onto an occupied square evicts the previous occupant', () => {
-    let roster = buildRoster('white', ['queen'], { 'king-1': 'e1' });
-    roster = placeUnit(roster, 'queen-1', sq('e1'));
-    expect(roster.placement['queen-1']).toBe(sq('e1'));
-    expect(roster.placement['king-1']).toBeUndefined();
-    expect(unplacedUnits(roster).map((unit) => unit.id)).toEqual(['king-1']);
+    let roster = buildRoster('white', ['queen', 'duelist'], { 'king-1': 'e1', 'queen-1': 'b1' });
+    roster = placeUnit(roster, 'duelist-1', sq('b1'));
+    expect(roster.placement['duelist-1']).toBe(sq('b1'));
+    expect(roster.placement['queen-1']).toBeUndefined();
+    expect(unplacedUnits(roster).map((unit) => unit.id)).toEqual(['queen-1']);
+  });
+
+  it('the King keeps its throne: it cannot be moved, evicted or trayed', () => {
+    const roster = buildRoster('white', ['queen'], { 'king-1': 'e1', 'queen-1': 'b1' });
+    const throne = sq('e1');
+
+    // The King itself will not budge…
+    expect(placeUnit(roster, 'king-1', sq('c1')).placement['king-1']).toBe(throne);
+    // …nothing may take the square from under it…
+    const pushy = placeUnit(roster, 'queen-1', throne);
+    expect(pushy.placement['queen-1']).toBe(sq('b1'));
+    expect(pushy.placement['king-1']).toBe(throne);
+    // …and it never goes back to the tray.
+    expect(unplaceUnit(roster, 'king-1').placement['king-1']).toBe(throne);
+    expect(clearPlacement(roster).placement).toEqual({ 'king-1': throne });
+  });
+
+  it('validation rejects a King anywhere but its throne', () => {
+    const roster = rawRoster('white', ['queen'], { 'king-1': 'b1', 'queen-1': 'e1' });
+    const result = validateRoster(roster, { requirePlacement: true });
+    expect(result.errors.some((error) => error.code === 'king-off-throne')).toBe(true);
+    // Auto-place puts an army built under the old rule right again.
+    const fixed = autoPlace(roster);
+    expect(fixed.placement['king-1']).toBe(sq('e1'));
+    expect(validateRoster(fixed, { requirePlacement: true }).valid).toBe(true);
   });
 
   it('auto-place fills empty legal squares', () => {
@@ -292,21 +335,21 @@ describe('starting a game', () => {
   const white = buildRoster(
     'white',
     ['champion', 'duelist', 'trapper'],
-    { 'king-1': 'b1', 'champion-1': 'a2', 'duelist-1': 'c2', 'trapper-1': 'f1' },
+    { 'king-1': 'e1', 'champion-1': 'a2', 'duelist-1': 'c2', 'trapper-1': 'f1' },
   );
   const black = mirrorRoster(white, 'black');
 
   it('mirroring flips the placement to the other side', () => {
-    expect(black.placement['king-1']).toBe(sq('b9'));
+    expect(black.placement['king-1']).toBe(sq('e9')); // its own throne
     expect(black.placement['champion-1']).toBe(sq('a8'));
   });
 
   it('builds a game with both armies exactly as placed', () => {
     const game = createGameFromRosters(white, black);
-    expect(game.board[sq('b1')]).toMatchObject({ type: 'king', color: 'white' });
+    expect(game.board[sq('e1')]).toMatchObject({ type: 'king', color: 'white' });
     expect(game.board[sq('a2')]).toMatchObject({ type: 'champion', color: 'white', hitPoints: 2 });
     expect(game.board[sq('c2')]).toMatchObject({ type: 'duelist', color: 'white' });
-    expect(game.board[sq('b9')]).toMatchObject({ type: 'king', color: 'black' });
+    expect(game.board[sq('e9')]).toMatchObject({ type: 'king', color: 'black' });
     expect(game.board[sq('f9')]).toMatchObject({ type: 'trapper', color: 'black' });
     expect(game.turn).toBe('white');
     expect(game.status).toBe('active');
@@ -315,8 +358,8 @@ describe('starting a game', () => {
   });
 
   it('refuses to start from an invalid roster', () => {
-    const broken = buildRoster('white', ['queen'], { 'king-1': 'e4', 'queen-1': 'd1' });
-    expect(() => createMatch(broken, black)).toThrow(/deployment zone/);
+    const broken = rawRoster('white', ['queen'], { 'king-1': 'e4', 'queen-1': 'd1' });
+    expect(() => createMatch(broken, black)).toThrow(/King must stand/);
   });
 
   it('the game plays by normal rules from the custom position', () => {
@@ -335,20 +378,63 @@ describe('starting a game', () => {
   it('king safety holds in custom games', () => {
     // A trapper next to the black king cannot be captured into check… rather,
     // the black king may not walk into the white Champion's rook-line.
-    const w = buildRoster('white', ['champion'], { 'king-1': 'e1', 'champion-1': 'a2' });
-    const b = buildRoster('black', ['queen'], { 'king-1': 'a8', 'queen-1': 'h8' });
+    const w = buildRoster('white', ['champion'], { 'king-1': 'e1', 'champion-1': 'e2' });
+    const b = buildRoster('black', ['queen'], { 'king-1': 'e9', 'queen-1': 'h8' });
     const game = createGameFromRosters(w, b);
-    const afterWhite = playMove(game, sq('e1'), sq('e2'));
+    // The Champion moves like a rook: up the e-file, into the black King.
+    const afterWhite = playMove(game, sq('e2'), sq('e7'));
     expect(afterWhite).not.toBeNull();
-    // Black king on a8 may not step to a7/b7? a-file is the Champion's line.
-    const kingReach = generateLegalMovesFrom(afterWhite!, sq('a8')).map((m) => squareName(m.to));
-    expect(kingReach).not.toContain('a7');
-    expect(isInCheck(afterWhite!, 'black')).toBe(true); // a8 itself is attacked
+    expect(isInCheck(afterWhite!, 'black')).toBe(true);
+    // The King may not step along the line it is checked on.
+    const kingReach = generateLegalMovesFrom(afterWhite!, sq('e9')).map((m) => squareName(m.to));
+    expect(kingReach).not.toContain('e8');
   });
 
   it('round-trips through JSON like any other game state', () => {
     const game = createGameFromRosters(white, black);
     const clone = JSON.parse(JSON.stringify(game));
     expect(clone.board[sq('a2')]).toMatchObject({ type: 'champion', hitPoints: 2 });
+  });
+});
+
+describe('castling from a drafted army', () => {
+  /** An army with the King enthroned and `corner` holding the i-file corner. */
+  const army = (color: 'white' | 'black', corner: string, cornerSquare: string): Roster =>
+    buildRoster(color, [corner], {
+      [`${corner}-1`]: cornerSquare,
+    });
+
+  it('the King castles with whatever friendly piece holds the corner', () => {
+    // A Catapult, not a Rook, stands on i1 — Chess 2 armies choose their own
+    // deployment, so the corner is not reserved for Rooks.
+    const white = army('white', 'catapult', 'i1');
+    const black = army('black', 'catapult', 'i9');
+    const game = createGameFromRosters(white, black);
+
+    expect(game.castling.whiteKingside).toBe(true);
+    expect(game.castling.whiteQueenside).toBe(false); // nobody on a1
+
+    const castle = generateLegalMovesFrom(game, sq('e1')).find(
+      (move) => move.special === 'castle-kingside',
+    );
+    expect(castle).toBeDefined();
+
+    const after = playMove(game, sq('e1'), sq('g1'));
+    expect(after).not.toBeNull();
+    expect(after!.board[sq('g1')]).toMatchObject({ type: 'king', color: 'white' });
+    expect(after!.board[sq('f1')]).toMatchObject({ type: 'catapult', color: 'white' });
+    expect(after!.board[sq('i1')]).toBeNull();
+  });
+
+  it('grants no rights when the corner is empty', () => {
+    const white = buildRoster('white', ['catapult'], { 'catapult-1': 'd2' });
+    const black = army('black', 'catapult', 'i9');
+    const game = createGameFromRosters(white, black);
+
+    expect(game.castling.whiteKingside).toBe(false);
+    expect(game.castling.blackKingside).toBe(true);
+    expect(
+      generateLegalMovesFrom(game, sq('e1')).some((move) => move.special?.startsWith('castle')),
+    ).toBe(false);
   });
 });

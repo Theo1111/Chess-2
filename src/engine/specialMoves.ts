@@ -9,6 +9,7 @@
 import { fileOf, forwardDirection, makeSquare, pawnStartRank, promotionRank, rankOf } from './board';
 import { blockedSquares } from './boardEffects';
 import { isShielded } from './effects';
+import { isImmobilized } from './auras';
 import { CASTLING_RULES } from './castling';
 import type { MoveGenContext } from './pieces';
 import type { Move, PieceType } from './types';
@@ -91,8 +92,13 @@ export function generateCastlingMoves(ctx: MoveGenContext): Move[] {
     if (!state.castling[rule.rightsKey]) continue;
     if (from !== rule.kingFrom) continue;
 
-    const rook = board[rule.rookFrom];
-    if (!rook || rook.color !== color || rook.type !== 'rook') continue;
+    // Chess 2 armies choose their own deployment, so the corner is not
+    // reserved for a Rook: whatever friendly piece holds it is the King's
+    // castling partner. Only its square matters — never its type.
+    const partner = board[rule.rookFrom];
+    if (!partner || partner.color !== color) continue;
+    // A partner that cannot move cannot be swung around the King either.
+    if (isImmobilized(state, rule.rookFrom)) continue;
     if (rule.empty.some((square) => board[square])) continue;
     if (rule.empty.some((square) => blockedSquares(state).has(square))) continue;
     // The king may not start in, pass through, or land in check.

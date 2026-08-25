@@ -82,6 +82,25 @@ gather information. Smoke Screen and Recon prices carry the limited-fidelity
 caveat and are first in line for re-pricing. The budget rose **42 → 55** so the
 classic 5+5-style loadout (~11–20 pts of cards) still leaves a traditional army.
 
+**Batch 10** settles where the King stands and who it may castle with. The King now
+holds its traditional seat — **e1 for White, e9 for Black** — and nothing else about
+deployment changed: every other piece still goes anywhere in the two home ranks. The
+throne is not a suggestion; the roster layer refuses to move the King off it, refuses
+to let anything else take the square, and `validatePlacement` rejects an army (a saved
+one from before the rule, or a tampered payload) that breaks it. `autoPlace` repairs
+such an army instead of leaving it illegal, and the placement screen renders the
+square as spoken for.
+
+That fixed seat is what makes castling possible again, and because an army chooses its
+own deployment, **the corner is not reserved for Rooks**: whatever friendly piece holds
+a1 / i1 (a9 / i9) is the King's castling partner. Only its square matters, never its
+type — a Catapult, a Champion or a Pawn will do. Rights are derived from the board at
+setup (`castlingRightsFromBoard`): a wing is available when the King is on its throne
+and *someone* holds that corner, so emptying a corner is a real cost. Everything else
+is standard: nothing between, no castling out of, through, or into check, rights lost
+the moment either square is touched — plus one Chess 2 rule, that a frozen or webbed
+partner cannot be swung around the King.
+
 **Batch 9** adds three new card classes, so a deck is no longer just spells and
 traps. **Relics** are equipment worn by a piece until something spends it:
 *Mirror Shield* (3) turns aside the first enemy card that targets its wearer —
@@ -109,7 +128,7 @@ evidence: unlike the original cards they have not been through a baseline run.
 **Batch 8** grows the arena: the board is now **9×9** (files a–i, ranks 1–9) and the
 roster budget is **55 points** (originally 42; raised when cards joined the pool). Deployment zones are each side's first two ranks (1–2
 and 8–9), pawns start on ranks 2/8 and promote on 9/1, castling uses the a/i-file
-rooks around the centred king on the e-file, and the standard position (used by the
+corners around the centred king on the e-file, and the standard position (used by the
 perft suite and the FEN tests) fields a symmetric twin-queen lineup (RNBQKQBNR + nine
 pawns). The perft suite now holds self-generated
 regression anchors: the original 8×8 fixtures were externally validated before the
@@ -688,8 +707,8 @@ Nothing about them is special-cased outside their own definitions:
   deliberately out of scope so far. The clock is an online feature (above).
 - Both players draft on one screen in sequence, so White can see Black's roster being
   built (and vice versa). Hidden drafting needs the future online/multi-screen layer.
-- Castling is disabled in custom-army games (a drafted army has no home-square rooks);
-  the standard starting position keeps it fully.
+- Castling in a custom army needs a piece left in a corner: the rights are read off
+  the deployment, so an army that empties both corners simply cannot castle.
 - Threefold repetition keys include hit-point, free-move and ambush-window state, but
   the Warrior's "moved last turn" flag is not part of the repetition key.
 - The ambush window tracks only the last movement of a turn: if a player moves and then

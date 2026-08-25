@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   BOARD_SIZE,
   FILE_COUNT,
@@ -45,13 +45,52 @@ interface BoardProps {
    * coordinates live in the image, not the DOM.
    */
   orientation?: Color;
+  /**
+   * A Ruler's Authority strike is landing: the colour whose King is spared.
+   * The board is rendered as it stood the instant before, then torn apart —
+   * the squares burn, the pieces are vaporised in the beam's wake, and only
+   * that King is left standing. See `RailgunStrike`.
+   */
+  annihilating?: Color | null;
 }
+
+/** Chunks of board thrown out of the impact line. */
+const DEBRIS = Array.from({ length: 26 }, (_, index) => index);
+
+/** Jagged seams torn across the playfield, drawn over the squares. */
+const CRACKS = [
+  'M0,50 L14,44 L26,53 L41,41 L55,52 L68,43 L82,54 L100,46',
+  'M0,50 L11,58 L23,49 L38,62 L52,50 L65,63 L79,51 L100,58',
+  'M32,0 L38,18 L30,33 L40,50 L33,66 L41,82 L36,100',
+  'M70,0 L64,16 L73,31 L62,50 L71,67 L63,83 L69,100',
+];
 
 const RANKS_WHITE = Array.from({ length: RANK_COUNT }, (_, index) => RANK_COUNT - 1 - index);
 const FILES_WHITE = Array.from({ length: FILE_COUNT }, (_, index) => index);
 /** Black sees the board from the far side: both axes reverse. */
 const RANKS_BLACK = [...RANKS_WHITE].reverse();
 const FILES_BLACK = [...FILES_WHITE].reverse();
+
+const NO_MOVES: ReadonlyMap<Square, Move[]> = new Map();
+const NO_SQUARES: ReadonlySet<Square> = new Set();
+
+/**
+ * A controller showing one fixed position and refusing every interaction —
+ * what the board renders while a strike is landing on it, so the pieces that
+ * are about to be vaporised are still standing there to vaporise.
+ */
+export function frozenBoard(game: GameState): BoardController {
+  return {
+    game,
+    selected: null,
+    movesBySquare: NO_MOVES,
+    lastMove: null,
+    checkSquare: null,
+    spellTargets: NO_SQUARES,
+    selectSquare: () => undefined,
+    tryMove: () => false,
+  };
+}
 
 /**
  * The board is a dumb renderer: it asks the controller what to highlight and
@@ -60,7 +99,7 @@ const FILES_BLACK = [...FILES_WHITE].reverse();
  * Both interaction styles route through the same controller calls:
  * click-to-select then click-to-move, or press-and-drag onto a target square.
  */
-export function Board({ controller, orientation = 'white' }: BoardProps) {
+export function Board({ controller, orientation = 'white', annihilating = null }: BoardProps) {
   const { game, selected, movesBySquare, lastMove, checkSquare, selectSquare, tryMove, spellTargets } = controller;
 
   // An Ambusher's guard zone, shown while it is selected so players can see
@@ -183,8 +222,18 @@ export function Board({ controller, orientation = 'white' }: BoardProps) {
     };
   }, [tryMove]);
 
+  const doomed = annihilating ?? null;
+
   return (
-    <div className={`board-frame${orientation === 'black' ? ' board-frame--black' : ''}`}>
+    <div
+      className={[
+        'board-frame',
+        orientation === 'black' ? 'board-frame--black' : '',
+        doomed ? 'board-frame--annihilated' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <div className="board" role="grid" aria-label="Chess board">
         {(orientation === 'black' ? RANKS_BLACK : RANKS_WHITE).map((rank) =>
           (orientation === 'black' ? FILES_BLACK : FILES_WHITE).map((file) => {
@@ -217,13 +266,23 @@ export function Board({ controller, orientation = 'white' }: BoardProps) {
               .filter(Boolean)
               .join(' ');
 
+            const spared =
+              doomed !== null &&
+              piece !== null &&
+              piece !== undefined &&
+              piece.color === doomed &&
+              getPieceDefinition(piece.type).royal;
+
             return (
               <button
                 key={square}
                 type="button"
                 role="gridcell"
                 data-square={square}
-                className={classes}
+                // The beam runs left to right, so everything it touches is
+                // timed off the file it stands on.
+                style={{ '--file': file } as CSSProperties}
+                className={`${classes}${doomed ? (spared ? ' square--spared' : ' square--burned') : ''}`}
                 aria-label={`${squareName(square)}${piece ? `, ${piece.color} ${piece.type}` : ''}`}
                 onPointerDown={() => {
                   selectSquare(square);
@@ -240,7 +299,11 @@ export function Board({ controller, orientation = 'white' }: BoardProps) {
                     <span className="square__fogmark">?</span>
                   </span>
                 ) : piece ? (
-                  <span className="square__piece">
+                  <span
+                    className={`square__piece${
+                      doomed ? (spared ? ' square__piece--spared' : ' square__piece--vaporised') : ''
+                    }`}
+                  >
                     <PieceIcon type={piece.type} color={piece.color} />
                     {game.effects.some((e) => e.kind === 'shield' && e.targetPieceId === piece.id) && (
                       <span className="square__effect square__effect--shield" title="Shielded">🛡️</span>
@@ -310,6 +373,23 @@ export function Board({ controller, orientation = 'white' }: BoardProps) {
           }),
         )}
       </div>
+
+      {doomed && (
+        <div className="board__ruin" aria-hidden="true">
+          <svg className="board__cracks" viewBox="0 0 100 100" preserveAspectRatio="none">
+            {CRACKS.map((path, index) => (
+              <path key={index} d={path} style={{ '--i': index } as CSSProperties} />
+            ))}
+          </svg>
+          {DEBRIS.map((index) => (
+            <span
+              key={index}
+              className="board__debris"
+              style={{ '--i': index, '--n': DEBRIS.length } as CSSProperties}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ import {
   getTimeControl,
   type TimeControlId,
 } from '../timeControls';
-import { Board } from '../components/Board';
+import { Board, frozenBoard } from '../components/Board';
 import { CardActivation } from '../components/CardActivation';
 import { CardChoiceDialog } from '../components/CardChoiceDialog';
 import { CardHand } from '../components/CardHand';
@@ -191,6 +191,7 @@ function OnlineGameView({
   const shown = replay?.state ?? fallback;
   const controller = useOnlineController(shown, myColor, canAct, (action) => void submit(action));
   const activation = useCardActivations(shown);
+  const strike = activation?.spell === 'rulers-authority' ? activation : null;
 
   if (!row) {
     return (
@@ -287,7 +288,11 @@ function OnlineGameView({
               opponent's are backs until the game itself turns one over. */}
           <CardHand game={replay.state} color={opposite(viewer)} side="opponent" />
           <CapturedPieces game={replay.state} color="black" />
-          <Board controller={controller} orientation={viewer} />
+          <Board
+            controller={strike ? frozenBoard(strike.before) : controller}
+            orientation={viewer}
+            annihilating={strike?.color ?? null}
+          />
           <CapturedPieces game={replay.state} color="white" />
           <CardHand
             game={replay.state}

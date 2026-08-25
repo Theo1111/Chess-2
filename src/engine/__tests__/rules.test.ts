@@ -403,3 +403,44 @@ describe('state bookkeeping', () => {
     expect(generateLegalMoves(clone).length).toBe(generateLegalMoves(state).length);
   });
 });
+
+describe('castling partners', () => {
+  const sqr = (name: string) => {
+    const square = parseSquareName(name);
+    if (square === null) throw new Error(`bad square ${name}`);
+    return square;
+  };
+
+  it('any friendly piece on the corner may be swung around the King', () => {
+    // A Queen on i1 stands in for the Rook; the FEN grants kingside rights.
+    const state = createStateFromFen('4k4/9/9/9/9/9/9/9/4K3Q w Kk - 0 1');
+    const castle = generateLegalMovesFrom(state, sqr('e1')).find(
+      (move) => move.special === 'castle-kingside',
+    );
+    expect(castle).toBeDefined();
+
+    const after = applyMove(state, castle!);
+    expect(after.board[sqr('g1')]).toMatchObject({ type: 'king' });
+    expect(after.board[sqr('f1')]).toMatchObject({ type: 'queen' });
+  });
+
+  it('a frozen partner cannot castle', () => {
+    const state = createStateFromFen('4k4/9/9/9/9/9/9/9/4K3Q w Kk - 0 1');
+    const partner = state.board[sqr('i1')]!;
+    const frozen = {
+      ...state,
+      effects: [
+        {
+          id: 'freeze:test',
+          kind: 'freeze' as const,
+          caster: 'black' as const,
+          targetPieceId: partner.id,
+          expiresAtTurnStartOf: 'black' as const,
+        },
+      ],
+    };
+    expect(
+      generateLegalMovesFrom(frozen, sqr('e1')).some((move) => move.special === 'castle-kingside'),
+    ).toBe(false);
+  });
+});

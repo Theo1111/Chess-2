@@ -6,7 +6,7 @@ import { buildMatchRow } from '../../cloud/records';
 import { saveMatch } from '../../cloud/storage';
 import { contentFingerprint } from '../../balance/contentFingerprint';
 import type { DraftState } from '../useAppFlow';
-import { Board } from '../components/Board';
+import { Board, frozenBoard } from '../components/Board';
 import { CardActivation } from '../components/CardActivation';
 import { CardHand } from '../components/CardHand';
 import { CardChoiceDialog } from '../components/CardChoiceDialog';
@@ -65,6 +65,9 @@ export function GameScreen({ draft, user, onExit }: GameScreenProps) {
   const status = describeStatus(game);
 
   const activation = useCardActivations(game);
+  // While a Ruler's Authority lands, the board on screen is the one being
+  // destroyed: the position as it stood the instant before the decree.
+  const strike = activation?.spell === 'rulers-authority' ? activation : null;
 
   const selectedMoves = [...controller.movesBySquare.values()].flat();
   const selectedCaptures = selectedMoves.filter((move) => move.captured).length;
@@ -89,7 +92,10 @@ export function GameScreen({ draft, user, onExit }: GameScreenProps) {
               the table, so their hand is the open one at the bottom. */}
           <CardHand game={game} color={opposite(game.turn)} side="opponent" />
           <CapturedPieces game={game} color="black" />
-          <Board controller={controller} />
+          <Board
+            controller={strike ? frozenBoard(strike.before) : controller}
+            annihilating={strike?.color ?? null}
+          />
           <CapturedPieces game={game} color="white" />
           <CardHand
             game={game}

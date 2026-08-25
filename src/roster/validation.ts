@@ -16,7 +16,13 @@ import {
 import { isCardOffered, isPieceEnabled } from './availability';
 import { MANDATORY_PIECE, isDraftable } from './catalog';
 import { validateLoadout } from './loadout';
-import { isMandatory, isStartingSquare, rosterCost, startingSquares } from './roster';
+import {
+  isMandatory,
+  isStartingSquare,
+  rosterCost,
+  startingSquares,
+  throneSquare,
+} from './roster';
 import type { Roster, RosterError, RosterValidation } from './types';
 
 export interface ValidateOptions {
@@ -102,9 +108,22 @@ export function validateComposition(roster: Roster): RosterError[] {
 export function validatePlacement(roster: Roster): RosterError[] {
   const errors: RosterError[] = [];
   const occupied = new Map<Square, string>();
+  const throne = throneSquare(roster.color);
 
   for (const unit of roster.units) {
     const square = roster.placement[unit.id];
+
+    // The one square nobody chooses: the King keeps its traditional seat,
+    // which is also the square the castling rules expect it on.
+    if (isMandatory(unit) && square !== undefined && square !== throne) {
+      errors.push({
+        code: 'king-off-throne',
+        message: `The King must stand on ${squareName(throne)}.`,
+        unitId: unit.id,
+        square,
+      });
+      continue;
+    }
     if (square === undefined) {
       errors.push({
         code: 'unplaced-unit',

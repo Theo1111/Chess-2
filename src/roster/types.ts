@@ -45,7 +45,8 @@ export type RosterErrorCode =
   | 'invalid-card'
   | 'duplicate-card'
   | 'piece-unavailable'
-  | 'card-unavailable';
+  | 'card-unavailable'
+  | 'king-off-throne';
 
 export interface RosterError {
   readonly code: RosterErrorCode;

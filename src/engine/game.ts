@@ -28,7 +28,12 @@ import { boardHasAbilityPieces } from './auras';
 import { beginTurn, hasEffect, pruneEffects } from './effects';
 import { tickPlies } from './boardEffects';
 import { interceptTripwire, processTraps } from './traps';
-import { ALL_CASTLING_RULES, FULL_CASTLING_RIGHTS, NO_CASTLING_RIGHTS } from './castling';
+import {
+  ALL_CASTLING_RULES,
+  CASTLING_RULES,
+  FULL_CASTLING_RIGHTS,
+  NO_CASTLING_RIGHTS,
+} from './castling';
 import { START_FEN, parseFen, positionKey, toFen } from './fen';
 import {
   findLegalMove,
@@ -190,8 +195,35 @@ export function createStateFromFen(fen: string = START_FEN): GameState {
 }
 
 /**
+ * Castling rights a freshly deployed board is entitled to: a side may castle
+ * on a wing when its King stands on the castling square and SOME friendly
+ * piece holds the corner. A drafted army picks its own deployment, so the
+ * corner is not reserved for a Rook — whoever stands there is the partner
+ * (see `generateCastlingMoves`).
+ */
+export function castlingRightsFromBoard(board: Board): CastlingRights {
+  let rights = NO_CASTLING_RIGHTS;
+  for (const color of ['white', 'black'] as const) {
+    for (const rule of CASTLING_RULES[color]) {
+      const king = board[rule.kingFrom];
+      const partner = board[rule.rookFrom];
+      const ready =
+        king !== null &&
+        king !== undefined &&
+        king.color === color &&
+        getPieceDefinition(king.type).royal &&
+        partner !== null &&
+        partner !== undefined &&
+        partner.color === color;
+      if (ready) rights = { ...rights, [rule.rightsKey]: true };
+    }
+  }
+  return rights;
+}
+
+/**
  * Build a game from an arbitrary board — how custom rosters start a match.
- * Castling is off by default: a drafted army has no rooks on their home squares.
+ * Castling rights are read off the deployment unless the caller names them.
  */
 export function createStateFromBoard(
   board: Board,
@@ -205,7 +237,7 @@ export function createStateFromBoard(
     {
       board,
       turn: options.turn ?? 'white',
-      castling: options.castling ?? NO_CASTLING_RIGHTS,
+      castling: options.castling ?? castlingRightsFromBoard(board),
       enPassant: null,
       halfmoveClock: 0,
       fullmoveNumber: 1,
