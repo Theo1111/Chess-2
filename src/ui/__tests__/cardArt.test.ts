@@ -12,14 +12,18 @@ const SHIPPED = new Set(
   ),
 );
 
-/** The cards the corrected kit delivered, and where each one lives. */
+/**
+ * The cards the corrected kit delivered, and where each one lives. Every face
+ * ships as JPEG: the kit's PNGs are re-encoded at quality 90 / 4:4:4 on the
+ * way in, exactly as the piece cards were.
+ */
 const KIT: Readonly<Record<string, string>> = {
-  'mirror-shield': '/card_art/mirror-shield.png',
-  'crown-of-command': '/card_art/crown-of-command.png',
-  decay: '/card_art/decay.png',
-  transform: '/card_art/transform.png',
-  wall: '/card_art/wall.png',
-  portal: '/card_art/portal.png',
+  'mirror-shield': '/card_art/mirror-shield.jpg',
+  'crown-of-command': '/card_art/crown-of-command.jpg',
+  decay: '/card_art/decay.jpg',
+  transform: '/card_art/transform.jpg',
+  wall: '/card_art/wall.jpg',
+  portal: '/card_art/portal.jpg',
 };
 
 /**

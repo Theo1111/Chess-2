@@ -197,7 +197,10 @@ everything stacks.
 
 **Card art**: twenty of the twenty-four cards have a painted face in
 `public/card_art/`, mapped onto the definitions via a single id → asset table in
-`spells.ts` (`SpellDefinition.artwork`). The Army Builder deck tiles render the full
+`spells.ts` (`SpellDefinition.artwork`). The kits supply 1024×1536 PNGs (63 MB
+for the set); they ship as quality-90 4:4:4 JPEGs (15 MB, ≥36.6 dB PSNR), the
+same treatment the piece cards get — checked at 1:1 on the worst-scoring card's
+rules panel, where the two encodings are indistinguishable. The Army Builder deck tiles render the full
 card faces (2:3, lazy-loaded), and so do the hands in the match (below) — one table
 feeds every surface, so the hand, the spent pile, a revealed opponent card and the
 activation flip need no per-card branches. Royal Order, Tripwire, Mine and the secret
@@ -250,8 +253,7 @@ falls back to the drawn card for the two pieces still without art: Trapper and
 Warrior. (The Pawn — Pawn-class, 1 point, every deployment square its own piece,
 capped by the `too-many-units` roster rule since 42 points can now buy more units
 than the two ranks hold — is painted as helmeted frontline infantry rather than as a
-literal chess pawn, and ships as the PNG its kit supplied rather than being
-re-encoded like its JPEG siblings.) It is presentation only — the table lives in the UI layer, the engine has
+literal chess pawn.) It is presentation only — the table lives in the UI layer, the engine has
 no idea the files exist, and the alt text is built from the `PieceDefinition` so
 assistive tech gets the authoritative rules rather than the printed ones. The
 supplied 1024×1536 PNGs (91 MB) ship as quality-90 4:4:4 JPEGs (22 MB total, ≥36 dB
@@ -790,7 +792,3 @@ Nothing about them is special-cased outside their own definitions:
   is enforced server-side (see above). It is also unpriced by design: at 0 points
   it is a joke, not a balance decision, and the balance laboratory does not draft
   secret cards.
-- Card faces ship as full-size 1024×1536 PNGs (~2.9 MB each, 58 MB for the set)
-  because that is how every kit supplied them. The piece cards were re-encoded to
-  quality-90 JPEG; the card faces have not been, so there is roughly 45 MB to
-  reclaim whenever load time starts to matter.

@@ -52,9 +52,7 @@ export const PIECE_CARD_ART: Readonly<Record<string, string>> = {
   spearman: '/bishop-class/spearman.jpg',
   warhound: '/bishop-class/warhound.jpg',
 
-  // Shipped as PNG, unlike its 31 siblings: the kit supplied it that way and
-  // the art is not ours to re-encode.
-  pawn: '/pawn-class/pawn.png',
+  pawn: '/pawn-class/pawn.jpg',
 };
 
 export function pieceCardArt(type: PieceType): string | undefined {
