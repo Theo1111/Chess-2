@@ -3,6 +3,7 @@ import { createInitialState, getSpellDefinition, opposite } from '../../engine';
 import type { AccountUser } from '../../cloud/auth';
 import {
   cancelMatchmaking,
+  describeOnlineError,
   findOnlineMatch,
   myActiveOnlineGame,
 } from '../../cloud/online';
@@ -52,7 +53,7 @@ export function OnlineScreen({ user, onExit }: OnlineScreenProps) {
     setLobbyError(null);
     const result = await findOnlineMatch(timeControl, user.displayName);
     if (result.error) {
-      setLobbyError(result.error);
+      setLobbyError(describeOnlineError(result.error));
       return;
     }
     if (result.gameId) setGameId(result.gameId);

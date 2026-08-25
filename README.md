@@ -575,10 +575,14 @@ Setup:
    to sign-in / create-account.
 5. Run [`supabase/online.sql`](supabase/online.sql),
    [`supabase/online-custom.sql`](supabase/online-custom.sql) and
-   [`supabase/online-clock.sql`](supabase/online-clock.sql) for online play,
-   drafting and the match clock.
-6. Optional: run [`supabase/admin.sql`](supabase/admin.sql) to enable admin
-   accounts and the content config (below).
+   [`supabase/online-clock.sql`](supabase/online-clock.sql) — **in that order** —
+   for online play, drafting and the match clock. Each builds on the one before,
+   and a project missing any of them answers "could not find the function … in
+   the schema cache" the moment someone searches for a game.
+6. Run [`supabase/admin.sql`](supabase/admin.sql) **last** for admin accounts and
+   the content config (below). Last because it redefines `submit_online_army` to
+   add the secret-card gate, so re-run it whenever you re-run one of the online
+   files.
 
 ### The online clock
 
